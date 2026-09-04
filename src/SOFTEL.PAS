@@ -19,8 +19,8 @@ program Softel;
 
   [re] STATE OF THIS FILE: the structure and the two long call sequences are
   transcribed and the shapes are read, but four routines are declared with
-  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB and
-  MoveBlock, all four of them assembler. Their addresses are on the plan as
+  routine bodies written. Nothing here is yet claimed to MATCH -- the plan's
+  rows carry that, and they are all still at R0. Their addresses are on the plan as
   rows at R0. Nothing here should be read as a claim that the bytes match. }
 
 { [re] THE ORDER OF THIS CLAUSE IS MEASURED, not stylistic. Turbo Pascal 6
@@ -121,23 +121,142 @@ end;
   and the x position second, so it is PutGlyph(Ch, X) and not the other way
   about -- which is how this file had it until the bytes were read.
 
-  [re] 1000:0095. 15 by 14, zero transparent, into a 320-stride buffer.
-  NOT WRITTEN. The original is a byte loop with a skip on zero rather than
-  indexed array code, so it is assembler in the source too. }
+  [re] 1000:0095, and 1000:00f0 below is the same routine with a different
+  inner loop. The frame layout confirms the signature: `ret 0Ah` is five
+  words, the destination offset is computed as X + Y*320 -- as Y*256 plus
+  Y*64, which is the `mov bh,bl / xor bl,bl` and the six `shl ax,1` -- and
+  the destination SEGMENT is the last parameter. A `var` parameter is the far
+  pointer at [bp+6].
+
+  [re] Both are NEAR: `ret` and not `retf`, because a routine declared in the
+  program rather than in a unit interface is near by default. And neither
+  opens with a stack check, even though the program is $S+ -- an `assembler`
+  procedure does not get one, which 118a:0024 shows too.
+
+  [re] The odd `push ax / mov ax,cx` before the row loop and `mov cx,ax`
+  inside it is the original's way of keeping the column count across rows.
+  Kept as written: a cleaner spelling would emit different bytes. }
 procedure PutSprite(X, Y : Word; var S : TSprite; Dest : Word); assembler;
 asm
+  push ds
+  push es
+  lds si, S
+  mov ax, X
+  mov bx, Y
+  push ax
+  mov ax, Dest
+  mov es, ax
+  mov ax, bx
+  mov bh, bl
+  xor bl, bl
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  add bx, ax
+  pop ax
+  add ax, bx
+  mov di, ax
+  mov dl, 0eh
+  xor ch, ch
+  mov cl, 0fh
+  cld
+  push ax
+  mov ax, cx
+@@row:
+  push di
+  mov cx, ax
+@@pixel:
+  mov bl, [si]
+  or bl, bl
+  jne @@opaque
+  inc si
+  inc di
+  loop @@pixel
+  jmp @@endrow
+@@opaque:
+  movsb
+  loop @@pixel
+@@endrow:
+  pop di
+  dec dl
+  je @@done
+  add di, 0140h
+  jmp @@row
+@@done:
+  pop ax
+  pop es
+  pop ds
 end;
 
 { [re] 1000:00f0. The strip blitted whole -- 0x99 words by 0x12 rows,
-  destination stride 0x140. The body calls it with Y=20 and X=7, so the
-  306-wide strip lands at column 7 of a 320-wide buffer. NOT WRITTEN. }
+  destination stride 0x140. The body calls it with X=7 and Y=20, so the
+  306-wide strip lands at column 7 of a 320-wide buffer -- and 0x99 words is
+  306 bytes exactly. }
 procedure PutStrip(X, Y : Word; var S : TStrip; Dest : Word); assembler;
 asm
+  push ds
+  push es
+  lds si, S
+  mov ax, X
+  mov bx, Y
+  push ax
+  mov ax, Dest
+  mov es, ax
+  mov ax, bx
+  mov bh, bl
+  xor bl, bl
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  shl ax, 1
+  add bx, ax
+  pop ax
+  add ax, bx
+  mov di, ax
+  mov dl, 012h
+  xor ch, ch
+  mov cl, 099h
+  cld
+  push ax
+  mov ax, cx
+@@row:
+  push di
+  mov cx, ax
+  rep movsw
+  pop di
+  dec dl
+  je @@done
+  add di, 0140h
+  jmp @@row
+@@done:
+  pop ax
+  pop es
+  pop ds
 end;
 
-{ [re] 1000:01ad. One palette entry through the DAC ports. NOT WRITTEN. }
+{ [re] 1000:01ad. One palette entry: the colour index to the DAC write port
+  at $3C8, then the three components to $3C9. Interrupts are masked across
+  the four OUTs. Byte parameters each take a word on the stack, so Col is at
+  [bp+0Ah] and B at [bp+4], which is the order below. }
 procedure SetRGB(Col, R, G, B : Byte); assembler;
 asm
+  cli
+  mov dx, 03c8h
+  mov al, Col
+  out dx, al
+  inc dx
+  mov al, R
+  out dx, al
+  mov al, G
+  out dx, al
+  mov al, B
+  out dx, al
+  sti
 end;
 
 { [re] 1000:013e. One animation frame: 51 objects, each a word pair taken
@@ -193,9 +312,27 @@ begin
   SetPalette(P);
 end;
 
-{ [re] 1000:038b. The five-argument block move ScrollUp uses. NOT WRITTEN. }
+{ [re] 1000:038b. The five-argument block move ScrollUp uses, and the push
+  order confirms this declaration: [bp+0Ch] goes to DS as the source segment
+  and [bp+4] is added to DI as the destination offset.
+
+  [re] `xor si,si` followed by `add si,SrcOfs` rather than a plain `mov` is
+  the original's spelling and is kept -- the shorter form is different bytes. }
 procedure MoveBlock(SrcSeg, DstSeg, Count, SrcOfs, DstOfs : Word); assembler;
 asm
+  push ds
+  cld
+  mov ax, DstSeg
+  mov es, ax
+  mov ax, SrcSeg
+  mov ds, ax
+  xor si, si
+  xor di, di
+  add si, SrcOfs
+  add di, DstOfs
+  mov cx, Count
+  rep movsw
+  pop ds
 end;
 
 { [re] 1000:03ae. The background wrap-scrolls up three scanlines: 960 bytes
