@@ -111,7 +111,9 @@ Proven working under both `tp6` and `tp61`. DOSBox-X and four Turbo Pascal trees
 
 **No `binpath` in `build.toml`.** The kit derives the DOS bin directory from `toolchain.<compiler>` in `kit.local.toml` — the answer that invokes the compiler — so there is no typed copy to go stale. Do not add one back: the kit's observation `typed-copy-of-a-derived-path` measured 15 stale entries across five configs in the sibling consumer, wrong for as long as a rename was old, while every check passed. A path used only to decorate an environment fails at a moment nobody is watching.
 
-**One trap.** This shell's *quoted* heredocs collapse a doubled backslash to a single one, which silently turns Windows paths into invalid TOML. Both config files use TOML literal strings (`'C:\TP600'`), which need no escaping.
+**One trap, and it is the harness rather than the shell.** Every `\\` pair in a Bash tool command collapses to one `\` before bash sees it — measured: `\`→`\`, `\\`→`\`, `\\\`→`\\`, `\\\\`→`\\`, while `\t` and `\'` pass through untouched. Quoting the heredoc delimiter does not prevent it. So **do not double a backslash**: a lone `\` arrives intact, and writing `'C:\\TP600'` — correct POSIX practice — is exactly what silently halved these paths into invalid TOML. Both config files now use TOML literal strings with single separators (`'C:\TP600'`). If a consumer itself wants `\\` (a Python literal, an awk or sed regex) send four.
+
+**And commands truncate above ~8KB**, which surfaces as `unexpected EOF while looking for matching '` — an error naming quoting rather than size. Write file content with the Write tool and run it; keep heredocs to a few short lines.
 
 `link.toml` holds the layout, every address in it measured. Its `map` key names `build/SOFTEL.MAP`, which does not exist yet — there is no `SOFTEL.PAS` to compile. That is a to-do, not a silence.
 
