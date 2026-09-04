@@ -121,6 +121,7 @@ var
   the Pascal spelling with Port[$3DA] reloads DX each time and came to
   thirty-two with a frame. So it is assembler, and the port address is hoisted
   deliberately rather than by accident. }
+{ [re] @asm 000 1000:0000 }
 procedure WaitRetrace; assembler;
 asm
   mov dx, 03dah
@@ -137,6 +138,7 @@ end;
 { [re] 1000:000e. One step of a fade to black -- every colour from 1 up has
   each component decremented while it is above 1, and the result says whether
   anything moved, so the caller can loop until it stops. }
+{ [re] @asm 000 1000:000e }
 function FadeStep : Boolean;
 var
   I     : Word;
@@ -176,6 +178,7 @@ end;
   [re] The odd `push ax / mov ax,cx` before the row loop and `mov cx,ax`
   inside it is the original's way of keeping the column count across rows.
   Kept as written: a cleaner spelling would emit different bytes. }
+{ [re] @asm 000 1000:0095 }
 procedure PutSprite(X, Y : Word; var S : TSprite; Dest : Word); assembler;
 asm
   push ds
@@ -235,6 +238,7 @@ end;
   destination stride 0x140. The body calls it with X=7 and Y=20, so the
   306-wide strip lands at column 7 of a 320-wide buffer -- and 0x99 words is
   306 bytes exactly. }
+{ [re] @asm 000 1000:00f0 }
 procedure PutStrip(X, Y : Word; var S : TStrip; Dest : Word); assembler;
 asm
   push ds
@@ -285,6 +289,7 @@ end;
 
   [re] 1000:013e. One animation frame: 51 objects, each a word pair taken
   from the path table at Frame * 208 + I * 4. }
+{ [re] @asm 000 1000:013e }
 procedure DrawFrame(N : Byte);
 var
   I : Byte;
@@ -297,6 +302,7 @@ end;
   at $3C8, then the three components to $3C9. Interrupts are masked across
   the four OUTs. Byte parameters each take a word on the stack, so Col is at
   [bp+0Ah] and B at [bp+4], which is the order below. }
+{ [re] @asm 000 1000:01ad }
 procedure SetRGB(Col, R, G, B : Byte); assembler;
 asm
   cli
@@ -316,6 +322,7 @@ end;
 { [re] 1000:01ca. All 256 entries. The parameter is BY VALUE -- the routine
   copies 768 bytes into a local before reading it, which is what a value
   parameter of array type does. }
+{ [re] @asm 000 1000:01ca }
 procedure SetPalette(P : TPalette);
 var
   I : Word;
@@ -349,6 +356,7 @@ end;
   and Faded is what every display loop tests to exit. The three components are
   tested in the order [0], [2], [1], which is the original's order and not a
   tidy one. Then a retrace wait, and out. }
+{ [re] @asm 000 1000:0231 }
 procedure CyclePalette(var P : TPalette);
 var
   Save : TPalette;
@@ -381,6 +389,7 @@ end;
 
   [re] `xor si,si` followed by `add si,SrcOfs` rather than a plain `mov` is
   the original's spelling and is kept -- the shorter form is different bytes. }
+{ [re] @asm 000 1000:038b }
 procedure MoveBlock(SrcSeg, DstSeg, Count, SrcOfs, DstOfs : Word); assembler;
 asm
   push ds
@@ -401,6 +410,7 @@ end;
 { [re] 1000:03ae. The background wrap-scrolls up three scanlines: 960 bytes
   saved off the top, 31360 moved down over them, and the saved rows written
   back at the bottom. }
+{ [re] @asm 000 1000:03ae }
 procedure ScrollUp;
 begin
   Move(Mem[VirtualSeg : $0140], SaveTop, 960);
@@ -420,6 +430,7 @@ end;
   is the glyph's outer subscript and the strip's column, I is the glyph's inner
   and the strip's row. The source expression is read twice, once in the test
   and once in the assignment, which is what the original does too. }
+{ [re] @asm 000 1000:03f5 }
 procedure PutGlyph(Ch : Byte; X : Word);
 var
   I, J : Byte;
@@ -450,6 +461,7 @@ end;
 
   [re] The strip is reset with an explicit Move and not an array assignment:
   the original calls the runtime with (Clean, Work, 5508). }
+{ [re] @asm 000 1000:04a1 }
 procedure ShowLine(S : String);
 var
   Line : String;
@@ -489,6 +501,7 @@ end;
   constant is the one at 05cd rather than 048e, X starts at 289 and walks
   DOWN by 17, and the counter starts at Length and runs to -20 -- 0xffec as a
   word, which is what says it is signed rather than a Byte. }
+{ [re] @asm 000 1000:05e0 }
 procedure ShowLineReverse(S : String);
 var
   Line : String;
@@ -527,6 +540,7 @@ end;
 { [re] 1000:070f. softel.dat, six BlockReads that sum to 100566 -- the file's
   exact size, which is the check on every size here: a wrong one would have
   to be paid for by another wrong one. }
+{ [re] @asm 000 1000:070f }
 procedure LoadData;
 begin
   Assign(DatFile, 'softel.dat');
@@ -562,6 +576,7 @@ end;
   index is 1..Length. S is a value parameter and IS modified -- a placed
   character is blanked in the local copy so it is not chosen twice, which is
   what makes the outer loop terminate. }
+{ [re] @asm 000 1000:07c0 }
 procedure FlyCredit(Y : Byte; S : String);
 var
   Left : Integer;

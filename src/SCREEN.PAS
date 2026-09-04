@@ -169,7 +169,7 @@ end;
   System procedure would compile to the same three instructions. If the byte
   comparison lands and this call's target does not, the name is what is
   wrong, not the shape. }
-{ [re] @asm 000 118a:007a }
+{ [re] @asm 000 118a:007a ScreenInit }
 begin
   Randomize;
 end.
