@@ -30,6 +30,17 @@ program Softel;
   is what puts them in the original's order, and it independently predicts
   the startup's init calls -- the image calls Crt's init then Screen's,
   which is this clause's own order, and GoldPlay has no init at all. }
+{ [re] THE PROGRAM IS $S- AND THE UNIT IS NOT, which is a source directive
+  rather than a command-line switch -- SCREEN.PAS matched at 144 of 144 bytes
+  with stack checking left at TPC's default, and its routines DO open with the
+  seven-byte `xor ax,ax / lcall` check.
+
+  Segment 1000's do not. 0231 is `enter 0300h,0` straight into its body, 013e
+  is `enter 6,0`, and 03ae is a bare `push bp / mov bp,sp` -- no check on any
+  of them. That seven bytes per framed routine was the uniform +7 this
+  reconstruction carried on every routine measured against the original. }
+{$S-}
+
 uses Crt, Screen, GoldPlay;
 
 type
@@ -86,12 +97,23 @@ var
     here. }
   Unread3375 : Byte;
 
-{ [re] 1000:0000. Waits for vertical retrace: poll the input status register
-  until the bit is low, then until it is high. }
-procedure WaitRetrace;
-begin
-  repeat until (Port[$3DA] and 8) = 0;
-  repeat until (Port[$3DA] and 8) <> 0;
+{ [re] 1000:0000, and it is FOURTEEN BYTES with NO FRAME:
+  mov dx,3dah / in al,dx / and al,8 / jne / in al,dx / and al,8 / je / ret.
+  DX is loaded ONCE and both loops reuse it, which is what makes it fourteen;
+  the Pascal spelling with Port[$3DA] reloads DX each time and came to
+  thirty-two with a frame. So it is assembler, and the port address is hoisted
+  deliberately rather than by accident. }
+procedure WaitRetrace; assembler;
+asm
+  mov dx, 03dah
+@@low:
+  in al, dx
+  and al, 8
+  jne @@low
+@@high:
+  in al, dx
+  and al, 8
+  je @@high
 end;
 
 { [re] 1000:000e. One step of a fade to black -- every colour from 1 up has
@@ -239,6 +261,22 @@ asm
   pop ds
 end;
 
+{ [re] DECLARATION ORDER IS THE ORIGINAL'S: DrawFrame at 013e comes BEFORE
+  SetRGB at 01ad, and this file had them the other way round. Order is not
+  cosmetic -- every near call's displacement depends on it.
+
+  [re] 1000:013e. One animation frame: 51 objects, each a word pair taken
+  from the path table at Frame * 208 + I * 4. }
+procedure DrawFrame(N : Byte);
+var
+  I : Byte;
+begin
+  for I := 1 to 51 do
+    PutSprite(MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210],
+              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 212],
+              Blip, BufSeg);
+end;
+
 { [re] 1000:01ad. One palette entry: the colour index to the DAC write port
   at $3C8, then the three components to $3C9. Interrupts are masked across
   the four OUTs. Byte parameters each take a word on the stack, so Col is at
@@ -257,18 +295,6 @@ asm
   mov al, B
   out dx, al
   sti
-end;
-
-{ [re] 1000:013e. One animation frame: 51 objects, each a word pair taken
-  from the path table at Frame * 208 + I * 4. }
-procedure DrawFrame(N : Byte);
-var
-  I : Byte;
-begin
-  for I := 1 to 51 do
-    PutSprite(MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210],
-              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 212],
-              Blip, BufSeg);
 end;
 
 { [re] 1000:01ca. All 256 entries. The parameter is BY VALUE -- the routine

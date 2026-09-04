@@ -144,3 +144,10 @@ switches = "/$S+ /$G+ /GD /Q"
 # probes/STRLIT.PAS and the register's strconst-temp-helper-096d.
 dialect  = "tp6"
 switches = "/$G+ /$X+ /$V- /GD /Q"
+
+[compiler.tp7]
+# Turbo Pascal 7.01, declared ONLY to test one construct: whether TP7 is what
+# emits the original's eighteen-byte call site. The image's copyright string
+# says 1983,90 which is TP6, so a match here would be a contradiction worth
+# knowing about rather than a conclusion. Never the build default.
+switches = "/$G+ /$X+ /GD /Q"
