@@ -325,6 +325,13 @@ procedure DrawFrame(N : Byte);
 var
   I : Byte;
 begin
+  { [re] The original's frame is enter 6 -- one byte for the counter and FOUR
+    more -- and a `with` gives exactly that length, 111 of 111. But it is the
+    WRONG SHAPE: a with-pointer is stored and reloaded, whereas the original
+    keeps one base in ES:DI and reads both fields off it as es:[di-0d4h] and
+    es:[di-0d2h], storing a value into a local at [bp-4]. So the four bytes
+    are a value local, not a pointer. Tried and reverted: matching the length
+    with the wrong instructions took spans DOWN, from 11491 aligned to 11481. }
   for I := 1 to 51 do
     PutSprite(Path^[N][I].X, Path^[N][I].Y, Blip, BufSeg);
 end;
