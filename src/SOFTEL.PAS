@@ -56,6 +56,24 @@ type
     and 15 * 14 = 210. }
   TSprite  = array [1..210] of Byte;
 
+  { [re] The font: 15104 bytes, 59 glyphs of 256. PutGlyph indexes it as
+    Ch * 0x100 + J * 0x10 + I, so a glyph is 16 by 16 and is stored with J
+    as the outer subscript -- transposed against the screen, where J is the
+    COLUMN and I the row. }
+  TGlyph   = array [1..16, 1..16] of Byte;
+  TFont    = array [0..58] of TGlyph;
+
+  { [re] The animation path: 14976 bytes as 72 frames of 208, and 72 * 208 is
+    14976 exactly. DrawFrame reads a word pair at N * 208 + I * 4 - 212, and
+    with both subscripts based at one that is precisely (N-1)*208 + (I-1)*4 --
+    which is what fixes the frame at 208 bytes rather than the 204 that 51
+    objects need, and fixes Y as the FIRST word of the pair. }
+  TObj     = record
+               Y, X : Word;
+             end;
+  TFrame   = array [1..52] of TObj;
+  TPath    = array [1..72] of TFrame;
+
 var
   { [re] DGROUP IN ADDRESS ORDER, because Turbo Pascal allocates a unit's
     variables in DECLARATION order -- so this list IS the layout, and a
@@ -63,7 +81,7 @@ var
     against the original with no build at all; dsmap.py checks them once
     there is a linked image. }
 
-  Font       : Pointer;                { DS:$0046 -- the 15104-byte font }
+  Font       : ^TFont;                 { DS:$0046 -- 15104 bytes }
   Pal        : TPalette;               { DS:$004a }
 
   { [re] DS:$034a, and it is TESTPLAY.PAS's own `Var I:Word` kept in place --
@@ -80,7 +98,7 @@ var
   Work       : TStrip;                 { DS:$1d10 -- the strip drawn into }
   Buf        : Pointer;                { DS:$3294 -- 64000-byte work buffer }
   BufSeg     : Word;                   { DS:$3298 }
-  Path       : Pointer;                { DS:$329a -- 72 frames x 208 bytes }
+  Path       : ^TPath;                 { DS:$329a -- 72 frames x 208 bytes }
   Blip       : TSprite;                { DS:$329e }
   KeyHit     : Byte;                   { DS:$3370 -- a key was pressed }
   Faded      : Byte;                   { DS:$3371 -- the fade has finished }
@@ -272,9 +290,7 @@ var
   I : Byte;
 begin
   for I := 1 to 51 do
-    PutSprite(MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210],
-              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 212],
-              Blip, BufSeg);
+    PutSprite(Path^[N][I].X, Path^[N][I].Y, Blip, BufSeg);
 end;
 
 { [re] 1000:01ad. One palette entry: the colour index to the DAC write port
@@ -311,27 +327,48 @@ end;
 { [re] 1000:0231 IS THE DEMO'S CLOCK, and its parameter is VAR -- it writes
   through the caller's array, which a value parameter could not do.
 
-  It rotates six colours: 576 bytes moved down by 18, then the six entries
-  that fell off the front written back at the end from saved copies. When
-  KeyHit is set it writes zeros there instead, so the cycling colours drain
-  to black; when the first of them reaches black it sets Faded, and Faded is
-  what every display loop tests to exit. Then a retrace wait, and out. }
+  IT CYCLES ENTRIES 1..192, and the indices are read off the offsets rather
+  than guessed. The Move is (P+0x15 -> P+3, 0x240) and every one of those is
+  divisible by three: 0x15 is entry 7, 3 is entry 1, and 0x240 is 192
+  entries. The six writes that follow are to P+0x231 through P+0x240, which
+  is entries 187 to 192 -- the tail of the range that was just shifted down,
+  so the six that fell off the front wrap round to the end.
+
+  [re] A PREVIOUS READING HAD THESE AS 119..124 and it was simply wrong: 561
+  divided by three is 187, not 119. Nothing measured caught it, because a
+  wrong palette index is still a valid palette index -- it would have cycled
+  the wrong six colours and looked plausible on screen. Per-routine SIZE is
+  what led here, not correctness.
+
+  [re] The six are copied STRAIGHT from the saved copy to the palette, one
+  three-byte record each. An earlier version went through six TRGB temporaries
+  and cost 114 bytes over the original for exactly that.
+
+  [re] When KeyHit is set it writes zeros to those same six instead, so the
+  cycling colours drain to black; when the first reaches black it sets Faded,
+  and Faded is what every display loop tests to exit. The three components are
+  tested in the order [0], [2], [1], which is the original's order and not a
+  tidy one. Then a retrace wait, and out. }
 procedure CyclePalette(var P : TPalette);
 var
-  Save                 : TPalette;
-  A, B, C, D, E, F     : TRGB;
+  Save : TPalette;
 begin
   Save := P;
   Move(P[7], P[1], 576);
-  A := Save[1]; B := Save[2]; C := Save[3];
-  D := Save[4]; E := Save[5]; F := Save[6];
-  P[119] := A; P[120] := B; P[121] := C;
-  P[122] := D; P[123] := E; P[124] := F;
+  P[187] := Save[1];
+  P[188] := Save[2];
+  P[189] := Save[3];
+  P[190] := Save[4];
+  P[191] := Save[5];
+  P[192] := Save[6];
   if KeyHit <> 0 then
     begin
-      FillChar(P[119], 3, 0); FillChar(P[120], 3, 0);
-      FillChar(P[121], 3, 0); FillChar(P[122], 3, 0);
-      FillChar(P[123], 3, 0); FillChar(P[124], 3, 0);
+      FillChar(P[187], 3, 0);
+      FillChar(P[188], 3, 0);
+      FillChar(P[189], 3, 0);
+      FillChar(P[190], 3, 0);
+      FillChar(P[191], 3, 0);
+      FillChar(P[192], 3, 0);
     end;
   if (P[1][0] = 0) and (P[1][2] = 0) and (P[1][1] = 0) then Faded := 1;
   WaitRetrace;
@@ -372,17 +409,25 @@ begin
 end;
 
 { [re] 1000:03f5. One 16x16 glyph into the strip, skipping zero pixels so a
-  glyph is transparent over what is already there. The font is indexed by
-  character times 256. }
+  glyph is transparent over what is already there.
+
+  [re] Through the TYPED pointer, not Mem[Seg():Ofs()]. The original reads the
+  font off a pointer with folded array arithmetic; spelling it with Mem[] and
+  an explicit segment reloads ES on every one of the 256 accesses and cost 44
+  bytes over the original.
+
+  [re] The subscript order is the original's and it is not the obvious one: J
+  is the glyph's outer subscript and the strip's column, I is the glyph's inner
+  and the strip's row. The source expression is read twice, once in the test
+  and once in the assignment, which is what the original does too. }
 procedure PutGlyph(Ch : Byte; X : Word);
 var
   I, J : Byte;
 begin
   for I := 1 to 16 do
     for J := 1 to 16 do
-      if Mem[Seg(Font^) : Ofs(Font^) + Ch * 256 + J * 16 + I] <> 0 then
-        Work[X + I * 306 + J] :=
-          Mem[Seg(Font^) : Ofs(Font^) + Ch * 256 + J * 16 + I];
+      if Font^[Ch][J][I] <> 0 then
+        Work[X + I * 306 + J] := Font^[Ch][J][I];
 end;
 
 { [re] 1000:04a1 and 1000:05e0 ARE MIRROR IMAGES and the difference is two
