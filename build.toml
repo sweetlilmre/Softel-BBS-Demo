@@ -10,6 +10,17 @@
 # contains no such file. See [compiler.tp6].
 
 src     = "src"
+
+# THE .TPU WIPE IS OFF, AND IT HAD TO BE. build.py writes `del *.TPU` into
+# BUILD.BAT so a failed compile cannot be measured against a stale unit -- but
+# that runs inside DOSBox AFTER staging, so it deleted the staged
+# GOLDPLAY.TPU, which is a build INPUT that cannot be regenerated (v1.00 ships
+# no goldplay.pas). The error it produced was `File not found (GOLDPLAY.TPU)`
+# on the uses clause, which reads as a missing file rather than a deleted one.
+# The protection is not lost: units.toml sets `sources`, so units.py refuses a
+# STALE build rather than measuring it, which is the check that actually
+# guards a measurement. A kit fix would exempt staged inputs from the wipe.
+wipe_tpu = false
 build   = "build"
 title   = "Softel build"
 drive   = "D"
@@ -40,6 +51,13 @@ dialect = "tp6"
 # (POP BP) and that adding /$G+ changes exactly one byte in the probe, `5d` to
 # `c9`. So the DEFAULT is measurably wrong here and $G+ is measurably right.
 #
+# /$X+ IS ALSO ASSERTED ON EVIDENCE. At 1000:15a8 the image calls Crt.ReadKey
+# and stores the result NOWHERE -- `lcall 0193:030d` followed straight by a
+# jump. Discarding a function result is exactly what extended syntax permits
+# and plain Pascal forbids, and TPC's default is $X-. Written as $X- the
+# source will not compile at all, which is the good kind of failure: the
+# keyboard drain reads `while KeyPressed do ReadKey`.
+#
 # $S is deliberately NOT asserted, and that is the opposite case rather than an
 # oversight: $S+ is TPC's own default AND is what the original shows, so naming
 # it would add a switch that changes nothing. probecheck reports 128 bytes for
@@ -55,13 +73,13 @@ dialect = "tp6"
 # SOFTEL's distribution has no TPC.CFG, so every one of those switches would
 # be a guess wearing the clothes of a fact. TPC's own defaults apply until
 # each is measured -- fpusites.py settles $N. $N is the one still open.
-switches = "/$G+ /GD /Q"
+switches = "/$G+ /$X+ /GD /Q"
 
 [compiler.tp61]
 # Turbo Pascal 6.01, declared so the patch level can be measured rather than
 # argued. Same reasoning on switches.
 dialect = "tp6"
-switches = "/$G+ /GD /Q"
+switches = "/$G+ /$X+ /GD /Q"
 
 [assembler]
 # Nothing here assembles yet. GoldPlay's PLAY.ASM is THEIRS and is not built:
@@ -76,7 +94,8 @@ flags = "/la /m2"
 mode = "declared"
 list = [
   "SCREEN.PAS",   # 118a  the virtual-screen unit -- uses nothing, so it is a
-                  #       leaf and needs no ordering decision yet
+                  #       leaf and needs no ordering decision
+  "SOFTEL.PAS",   # 1000  the program
 ]
 
 [stage]
@@ -84,6 +103,13 @@ list = [
 # everything round-trips through the DOS code page and a character that cannot
 # survive becomes visible here rather than as an error forty lines away.
 encoding = "cp437"
+
+# GOLDPLAY.TPU is a BUILD INPUT and cannot be rebuilt: goldplay/v1.00 ships no
+# goldplay.pas, only the compiled unit, the object and the example program. It
+# is staged so `uses GoldPlay` resolves. bin/SOFTEL.OVL is byte-identical to
+# the v1.00 overlay beside it, which is what says the demo shipped this
+# version unmodified.
+alongside = ["goldplay/v1.00/GOLDPLAY.TPU"]
 
 [names]
 # source name -> 8.3 name, where they differ. Empty until src/ has files.

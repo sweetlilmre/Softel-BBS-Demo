@@ -26,8 +26,12 @@ rtl   = ["System", "Crt"]
 noseg = []
 
 [unitname]
-# source name -> linker-map name, where they differ. Empty: nothing is
-# abbreviated yet, because src/ is empty.
+# source name -> linker-map name, where they differ. EMPTY, and an entry was
+# tried and removed rather than left: mapping Crt and System to their
+# upper-case map names changed no output, because mapcmp.py already resolves
+# both and linkorder.py's prediction comes from the `uses` graph, which cannot
+# name a unit this project has no source for. A config entry that changes
+# nothing reads like a decision and checks nothing.
 
 [part."000"]
 # THE MAP DOES NOT EXIST YET and this names where it will be. src/ holds no

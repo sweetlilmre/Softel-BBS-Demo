@@ -1,0 +1,419 @@
+program Softel;
+
+{ SOFTEL.EXE -- Asphyxia's second demo, 1993, for the Softel BBS in Durban.
+
+  [re] This is segment 1000 of the load image: 0x1600 bytes, entry at 0f94.
+  Together with SCREEN.PAS it is the whole reconstruction -- 11f5 is System,
+  1193 is Crt, 1160 is the stock GoldPlay unit and 12eb is DGROUP, and none
+  of those is ours to write.
+
+  [re] The opening is TESTPLAY.PAS, GoldPlay's own example, which the
+  distribution ships beside the library: the same LoadOvl / AskInit /
+  Initialize / LoadModule sequence in the same order, and the same
+  'Module Not Found' message. That is what identified GoldPlay's five entry
+  points by order as well as by arity.
+
+  [re] Read with Ghidra's decompiler over segment 1000's fifteen near-call
+  targets. Every name below is this reconstruction's: a load image carries
+  addresses and shapes, never identifiers.
+
+  [re] STATE OF THIS FILE: the structure and the two long call sequences are
+  transcribed and the shapes are read, but four routines are declared with
+  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB, MoveBlock,
+  ShowLine, ShowLineReverse and FlyCredit. Their addresses are on the plan as
+  rows at R0. Nothing here should be read as a claim that the bytes match. }
+
+{ [re] THE ORDER OF THIS CLAUSE IS MEASURED, not stylistic. Turbo Pascal 6
+  emits unit code segments in the REVERSE of the uses clause: written as
+  `Crt, GoldPlay, Screen` the map came out SCREEN, GOLDPLAY, CRT, and the
+  original is GOLDPLAY, SCREEN, CRT. Reversing to `Crt, Screen, GoldPlay`
+  is what puts them in the original's order, and it independently predicts
+  the startup's init calls -- the image calls Crt's init then Screen's,
+  which is this clause's own order, and GoldPlay has no init at all. }
+uses Crt, Screen, GoldPlay;
+
+type
+  { [re] 768 bytes at DS:$004a, walked 0..255 by SetPalette. }
+  TRGB     = array [0..2] of Byte;
+  TPalette = array [0..255] of TRGB;
+
+  { [re] 5508 bytes. PutGlyph writes it with a stride of 306, and
+    306 * 18 = 5508, so it is 306 wide by 18 high. }
+  TStrip   = array [1..5508] of Byte;
+
+  { [re] 210 bytes. PutSprite draws exactly 15 columns by 14 rows from it,
+    and 15 * 14 = 210. }
+  TSprite  = array [1..210] of Byte;
+
+var
+  { [re] DGROUP IN ADDRESS ORDER, because Turbo Pascal allocates a unit's
+    variables in DECLARATION order -- so this list IS the layout, and a
+    missing declaration shifts every address below it. dsgaps.py prices these
+    against the original with no build at all; dsmap.py checks them once
+    there is a linked image. }
+
+  Font       : Pointer;                { DS:$0046 -- the 15104-byte font }
+  Pal        : TPalette;               { DS:$004a }
+
+  { [re] DS:$034a, and it is TESTPLAY.PAS's own `Var I:Word` kept in place --
+    the ending below fades the music with `for I := 64 downto 0`, exactly as
+    that example does, and this is the counter it walks. Its position here,
+    between the palette and the file variable, is where TestPlay declares
+    it. }
+  I          : Word;
+
+  DatFile    : File;                   { DS:$034c -- untyped, so 128 bytes,
+                                         and $034c + 128 = $03cc exactly }
+  SaveTop    : array [1..960] of Byte; { DS:$03cc -- ScrollUp's wrap rows }
+  Clean      : TStrip;                 { DS:$078c -- the pristine strip }
+  Work       : TStrip;                 { DS:$1d10 -- the strip drawn into }
+  Buf        : Pointer;                { DS:$3294 -- 64000-byte work buffer }
+  BufSeg     : Word;                   { DS:$3298 }
+  Path       : Pointer;                { DS:$329a -- 72 frames x 208 bytes }
+  Blip       : TSprite;                { DS:$329e }
+  KeyHit     : Byte;                   { DS:$3370 -- a key was pressed }
+  Faded      : Byte;                   { DS:$3371 -- the fade has finished }
+  Frame      : Byte;                   { DS:$3372 -- cycles 1..72 }
+
+  { [re] DS:$3373, and DS:$3375 below. One byte each, between variables that
+    ARE reached, and nothing observed touches either. Same reasoning as
+    Unread034A. }
+  Unread3373 : Byte;
+
+  Music      : Char;                   { DS:$3374 }
+
+  { [re] GoldPlay's Error is at DS:$3376, so this program's own variables end
+    here. }
+  Unread3375 : Byte;
+
+{ [re] 1000:0000. Waits for vertical retrace: poll the input status register
+  until the bit is low, then until it is high. }
+procedure WaitRetrace;
+begin
+  repeat until (Port[$3DA] and 8) = 0;
+  repeat until (Port[$3DA] and 8) <> 0;
+end;
+
+{ [re] 1000:000e. One step of a fade to black -- every colour from 1 up has
+  each component decremented while it is above 1, and the result says whether
+  anything moved, so the caller can loop until it stops. }
+function FadeStep : Boolean;
+var
+  I     : Word;
+  Moved : Boolean;
+begin
+  Moved := False;
+  for I := 1 to 255 do
+    begin
+      if Pal[I][0] > 1 then begin Moved := True; Dec(Pal[I][0]); end;
+      if Pal[I][1] > 1 then begin Moved := True; Dec(Pal[I][1]); end;
+      if Pal[I][2] > 1 then begin Moved := True; Dec(Pal[I][2]); end;
+    end;
+  FadeStep := Moved;
+end;
+
+{ [re] 1000:0095. 15 by 14, zero transparent, into a 320-stride buffer.
+  NOT WRITTEN. The original is a byte loop with a skip on zero rather than
+  indexed array code, so it is assembler in the source too. }
+procedure PutSprite(Dest : Word; var S : TSprite; Y, X : Word); assembler;
+asm
+end;
+
+{ [re] 1000:00f0. The strip blitted whole -- 0x99 words by 0x12 rows,
+  destination stride 0x140. The body calls it with Y=20 and X=7, so the
+  306-wide strip lands at column 7 of a 320-wide buffer. NOT WRITTEN. }
+procedure PutStrip(Dest : Word; var S : TStrip; Y, X : Word); assembler;
+asm
+end;
+
+{ [re] 1000:01ad. One palette entry through the DAC ports. NOT WRITTEN. }
+procedure SetRGB(Col, R, G, B : Byte); assembler;
+asm
+end;
+
+{ [re] 1000:013e. One animation frame: 51 objects, each a word pair taken
+  from the path table at Frame * 208 + I * 4. }
+procedure DrawFrame(N : Byte);
+var
+  I : Byte;
+begin
+  for I := 1 to 51 do
+    PutSprite(BufSeg, Blip,
+              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 212],
+              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210]);
+end;
+
+{ [re] 1000:01ca. All 256 entries. The parameter is BY VALUE -- the routine
+  copies 768 bytes into a local before reading it, which is what a value
+  parameter of array type does. }
+procedure SetPalette(P : TPalette);
+var
+  I : Word;
+begin
+  for I := 0 to 255 do
+    SetRGB(I, P[I][0], P[I][1], P[I][2]);
+end;
+
+{ [re] 1000:0231 IS THE DEMO'S CLOCK, and its parameter is VAR -- it writes
+  through the caller's array, which a value parameter could not do.
+
+  It rotates six colours: 576 bytes moved down by 18, then the six entries
+  that fell off the front written back at the end from saved copies. When
+  KeyHit is set it writes zeros there instead, so the cycling colours drain
+  to black; when the first of them reaches black it sets Faded, and Faded is
+  what every display loop tests to exit. Then a retrace wait, and out. }
+procedure CyclePalette(var P : TPalette);
+var
+  Save                 : TPalette;
+  A, B, C, D, E, F     : TRGB;
+begin
+  Save := P;
+  Move(P[7], P[1], 576);
+  A := Save[1]; B := Save[2]; C := Save[3];
+  D := Save[4]; E := Save[5]; F := Save[6];
+  P[119] := A; P[120] := B; P[121] := C;
+  P[122] := D; P[123] := E; P[124] := F;
+  if KeyHit <> 0 then
+    begin
+      FillChar(P[119], 3, 0); FillChar(P[120], 3, 0);
+      FillChar(P[121], 3, 0); FillChar(P[122], 3, 0);
+      FillChar(P[123], 3, 0); FillChar(P[124], 3, 0);
+    end;
+  if (P[1][0] = 0) and (P[1][2] = 0) and (P[1][1] = 0) then Faded := 1;
+  WaitRetrace;
+  SetPalette(P);
+end;
+
+{ [re] 1000:038b. The five-argument block move ScrollUp uses. NOT WRITTEN. }
+procedure MoveBlock(SrcSeg, DstSeg, Count, SrcOfs, DstOfs : Word); assembler;
+asm
+end;
+
+{ [re] 1000:03ae. The background wrap-scrolls up three scanlines: 960 bytes
+  saved off the top, 31360 moved down over them, and the saved rows written
+  back at the bottom. }
+procedure ScrollUp;
+begin
+  Move(Mem[VirtualSeg : $0140], SaveTop, 960);
+  MoveBlock(VirtualSeg, VirtualSeg, 31360, $0500, $0140);
+  Move(SaveTop, Mem[VirtualSeg : $F500], 960);
+end;
+
+{ [re] 1000:03f5. One 16x16 glyph into the strip, skipping zero pixels so a
+  glyph is transparent over what is already there. The font is indexed by
+  character times 256. }
+procedure PutGlyph(X : Word; Ch : Byte);
+var
+  I, J : Byte;
+begin
+  for I := 1 to 16 do
+    for J := 1 to 16 do
+      if Mem[Seg(Font^) : Ofs(Font^) + Ch * 256 + J * 16 + I] <> 0 then
+        Work[X + I * 306 + J] :=
+          Mem[Seg(Font^) : Ofs(Font^) + Ch * 256 + J * 16 + I];
+end;
+
+{ [re] 1000:04a1 and 1000:05e0 ARE MIRROR IMAGES and the difference is two
+  numbers. Both exit at once if a key is down or the fade has finished, both
+  reset the strip from Clean, and both loop: scroll, cycle, blit the strip,
+  draw a glyph, advance the frame, blit to $A000. ShowLine walks X from 0
+  upward by 17 with its character index rising from 1, so the line builds
+  from the left; ShowLineReverse starts X at 289 and walks DOWN by 17 with
+  the index falling from Length, so it builds from the right. That is why the
+  body alternates them.
+
+  [reading] The two 18-blank constants at 048e and 05cd are one per routine.
+  A shared constant would have been emitted once, so the source has the
+  literal written out twice rather than a named constant used twice.
+
+  NOT WRITTEN. }
+procedure ShowLine(S : String);
+begin
+end;
+
+procedure ShowLineReverse(S : String);
+begin
+end;
+
+{ [re] 1000:070f. softel.dat, six BlockReads that sum to 100566 -- the file's
+  exact size, which is the check on every size here: a wrong one would have
+  to be paid for by another wrong one. }
+procedure LoadData;
+begin
+  Assign(DatFile, 'softel.dat');
+  Reset(DatFile, 1);
+  BlockRead(DatFile, Blip, 210);
+  BlockRead(DatFile, Clean, 5508);
+  BlockRead(DatFile, Path^, 14976);
+  BlockRead(DatFile, Virtual^, 64000);
+  BlockRead(DatFile, Pal, 768);
+  BlockRead(DatFile, Font^, 15104);
+  Close(DatFile);
+end;
+
+{ [re] 1000:07c0 is the finale and it is TEXT MODE rather than the virtual
+  screen, which is the only reason Crt is linked at all. It counts the
+  non-space characters, then repeatedly picks a random position in the line
+  and walks that character up from row 24 to row Y with GotoXY and a Delay
+  per step, blanking the cell it came from, until every one is placed.
+
+  [re] The row comes FIRST: the body pushes it before the string.
+
+  NOT WRITTEN. }
+procedure FlyCredit(Y : Byte; S : String);
+begin
+end;
+
+begin
+  ClrScr;
+  Write('Do you want music? (y/n) : ');
+  repeat
+    Music := UpCase(ReadKey);
+  until Pos(Music, 'YN') <> 0;
+  Write(Music);
+  WriteLn;
+  if Music = 'Y' then
+    begin
+      LoadOvl('softel.ovl');
+      AskInit;
+      Initialize;
+      LoadModule('patega.mod');
+      if Error <> 0 then
+        begin
+          WriteLn('Module Not Found');
+          Halt;
+        end;
+      ClrScr;
+    end;
+  Frame := 1;
+  Faded := 0;
+  KeyHit := 0;
+  OpenVirtual;
+  GetMem(Path, 14976);
+  GetMem(Buf, 64000);
+  GetMem(Font, 15104);
+  BufSeg := Seg(Buf^);
+  SetGraphicsMode;
+  LoadData;
+  if Music = 'Y' then StartPlaying;
+  SetPalette(Pal);
+  Blit(VirtualSeg, $A000);
+
+  { [re] The whole advert is one repeat loop -- 13e9 jumps back to 10d3,
+    which is the FIRST of these calls. That is why the 44 calls are unrolled
+    in the image: they are statements, not a loop over a table. }
+  repeat
+    ShowLine('     WELCOME      ');
+    ShowLineReverse('     TO THE       ');
+    ShowLine('SOFTEL MONSTER BBS');
+    ShowLineReverse('   THE LARGEST    ');
+    ShowLine('  BBS IN AFRICA   ');
+    ShowLineReverse('  WITH ACCESS TO  ');
+    ShowLine('INTERNATIONAL MAIL');
+    ShowLineReverse('(FIDO,USENET,ETC.)');
+    ShowLine('  WITH 100''S OF   ');
+    ShowLineReverse('   CONFERENCES    ');
+    ShowLine('AND GAZIILLIONS OF');
+    ShowLineReverse('REALLY GREAT FILES');
+    ShowLine('       ####       ');
+    ShowLineReverse('  A NEW MEGATAPE  ');
+    ShowLine(' EVERY WEEK FROM  ');
+    ShowLineReverse('THE UK, BRINGS THE');
+    ShowLine('LATEST FILES RIGHT');
+    ShowLineReverse('TO YOUR DOORSTEP. ');
+    ShowLine('       ####       ');
+    ShowLineReverse('AND NOW WITH EVEN ');
+    ShowLine(' BETTER WITH THE  ');
+    ShowLineReverse('LATEST VERSION OF ');
+    ShowLine('PC-BOARD (V 15.0) ');
+    ShowLineReverse('       ####       ');
+    ShowLineReverse('   YOU HAVE NOT   ');
+    ShowLine('EXPERIENCED BBS''N ');
+    ShowLineReverse('  UNTIL YOU HAVE  ');
+    ShowLine('EXPERIENCED SOFTEL');
+    ShowLineReverse('!THE MONSTER BBS! ');
+    ShowLine('                  ');
+    ShowLineReverse('                  ');
+    ShowLine('PHONE THE ASPHYXIA');
+    ShowLineReverse('BBS (031) 765-5312');
+    ShowLine('HST DS 16.8, FOR ');
+    ShowLineReverse('OUR LATEST DEMOS!!');
+    ShowLine('                  ');
+    ShowLineReverse('                  ');
+    ShowLine(' A S P H Y X I A  ');
+    ShowLineReverse('   R U L E S !    ');
+    ShowLine('                  ');
+    ShowLineReverse('                  ');
+    ShowLine('                  ');
+    ShowLineReverse('                  ');
+  until KeyPressed or (Faded <> 0);
+
+  repeat
+    SetPalette(Pal);
+    ShowLine(' ');
+  until not FadeStep;
+
+  FreeMem(Buf, 64000);
+  FreeMem(Font, 15104);
+  CloseVirtual;
+  TextMode(3);
+
+  { [re] INT 10h with AH=1 and CH=$FF hides the cursor. Assembler because the
+    original is -- Crt has no way to say it. }
+  asm
+    mov ah, 1
+    mov ch, 0ffh
+    mov cl, 9
+    int 10h
+  end;
+
+  FlyCredit(3, '                              -=[ ASPHYXIA ]=-');
+  FlyCredit(5, '                    Asphyxia was proud to present to you');
+  FlyCredit(6, '                              the SOFTEL DEMO');
+  FlyCredit(8, '           Softel Is the largest BBS in Africa, and the Asphyxia');
+  FlyCredit(9, '                team may be reached there under the names');
+  FlyCredit(10, '               Grant Smith, Peter Edwards or Brian Bailey');
+  FlyCredit(11, '                       (Denthor, EzE and LiveWire)');
+  FlyCredit(13, '               Or reach us at the following EMAIL Adresses :');
+  FlyCredit(14, '                                     Grant.Smith@catpe.alt.za');
+  FlyCredit(15, '                                     Brian.Bailey@catpe.alt.za');
+  FlyCredit(16, '                                  or Peter.Edwards@catpe.alt.za');
+  FlyCredit(18, '                              or   Edwards@Beastie.cs.und.ac.za');
+  FlyCredit(19, '                                   Bailey@Beastie.cs.und.ac.za');
+  FlyCredit(20, '               Or leave mail to ''Asphyxia'' at the ASPHYXIA BBS');
+  FlyCredit(21, '                                Tel : (031) 765-5312');
+  FlyCredit(23, '                      This is the second Demo written by');
+  FlyCredit(24, '                      -=[       A S P H Y X I A      ]=-');
+
+  { [re] 1000:159a onward. WriteLn, then the keyboard is drained -- while a
+    key is waiting, read and discard it -- so the fade below is not skipped
+    by whatever keystroke ended the advert.
+
+    [re] Then TESTPLAY.PAS's ending, kept almost word for word: the volume
+    walked down 64 to 0 with a Delay(50) each step, then StopPlaying, DeAlloc
+    and RemoveOvl. Those four calls are what account for GoldPlay's segment
+    being 0x2a0 in the original against 0x228 when they were missing here --
+    smart linking keeps only what is reached, so an absent call shows up as a
+    short segment rather than as an error. }
+  WriteLn;
+  while KeyPressed do ReadKey;
+  if Music = 'Y' then
+    begin
+      for I := 64 downto 0 do
+        begin
+          MasterVolume(I);
+          Delay(50);
+        end;
+      StopPlaying;
+      DeAlloc;
+      RemoveOvl;
+    end;
+
+  { [re] CH=6, CL=7 restores the ordinary cursor the block above hid. }
+  asm
+    mov ah, 1
+    mov ch, 6
+    mov cl, 7
+    int 10h
+  end;
+end.
