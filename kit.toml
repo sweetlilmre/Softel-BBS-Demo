@@ -1,0 +1,67 @@
+# Where this project keeps things. Read by every instrument in kit/.
+# Proposed by kit/tools/wizard.py; the judgements below are recorded beside
+# each key, because the wizard refuses to guess them.
+
+[layout]
+# The sources we are WRITING -- the SOFTEL.EXE reconstruction. Created empty:
+# the wizard proposed goldplay/v1.00 on `shape only` evidence, which is the
+# third-party sound library and not ours. bin/SOFTEL.OVL is byte-identical to
+# goldplay/v1.00/GOLDPLAY.OVL, so the overlay is a build INPUT, not a target.
+src      = "src"
+wiki     = "kit/wiki"
+register = "status.toml"
+
+# This project keeps a stripped copy, so apparatus comments carry a [re] tag
+# written in the same keystroke as the comment (WORKING.md section 2a) and
+# tagcheck.py is on the session check list. Decided while src/ was still empty,
+# which is the cheapest this decision ever is: left later, the same judgement
+# has to be re-derived one paragraph at a time, and more than half of it carries
+# no mechanical tell for any instrument to find.
+tagged   = true
+
+# shared_asm.py --gate is on the session check list and exits 2 without this.
+# The file is empty; see its own header for why that is the honest state.
+exempt   = "src/asm/shared-exempt.txt"
+
+# Where the DOSBox build stages and leaves its output. One directory for both,
+# as the sibling consumer does: the compiler writes beside what it staged.
+build    = "build"
+built    = "build"
+
+# Which files in `built` are OURS. EXPLICIT, not a glob. A glob that matched a
+# copy of the original would make a compare tool measure an original against
+# itself AND PASS -- SETUP.md names this as the reason there is no default.
+# Our build leaves one executable; the original is ref/softel.bin.
+built_pattern = ["SOFTEL.EXE"]
+
+# probecheck.py re-runs these; a probe is cited the way a binary is -- by a
+# resolved investigation and by source comments -- and nothing else in the tree
+# recompiles one, so a probe that has quietly stopped yielding a measurement
+# turns every citation of it back into an assertion.
+probes   = "probes"
+
+[target]
+# The paragraph the Ghidra disassembly calls the start of the load image. Read
+# off the memory map of ghidra/Softel.gpr program SOFTEL.EXE, whose lowest
+# block is CODE_0 at 1000:0000 -- not guessed, and not the MZ header's own
+# Base Address, which Ghidra reports as 0000:0000.
+first_para = 0x1000
+
+# One image, so a one-row table. bin/ stays the distribution exactly as it
+# shipped; ref/softel.bin is the measurement copy.
+[target.original]
+"000" = "ref/softel.bin"
+
+[encaudit]
+# encaudit.py finds text I/O that leans on the locale encoding, which on Windows
+# is cp1252 -- and the kit's own docstring records that mojibaking two documents
+# and producing two false comparisons was not theoretical. This host has no
+# Python of its own yet, so the audit is pointed at the tools it actually runs.
+# Add this repo's own directory here the moment it grows a script.
+# encaudit.py recurses as of kit c80b0cd, so this is ONE entry again. It
+# listed all four subdirectories by hand until then, because a flat glob
+# examined the 7 files directly under kit/tools and printed `0 site(s) in 7
+# file(s)` over the 69 it never walked. The kit's own fix names that
+# workaround as the thing to delete: it would have needed extending every
+# time a folder was added, silently wrong until somebody noticed.
+dirs = ["kit/tools"]

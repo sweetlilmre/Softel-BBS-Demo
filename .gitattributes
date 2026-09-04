@@ -1,0 +1,29 @@
+# DOS FILES ARE CRLF, BYTE FOR BYTE. Anything a 1990s DOS tool reads or IS.
+#
+# `-text` tells git to store exactly what is on disk and never normalise it. A
+# reconstruction measured by byte comparison against a 1993 executable cannot
+# let a checkout rewrite a byte of the files TPC, TASM or DOSBox's shell read.
+#
+# This is not enforcement on its own -- eolcheck.py exists because that same
+# rule was documented, the extension was listed, and a bare-LF .BAT still
+# shipped and made DOSBox report a program as missing while it sat in the same
+# directory. The attribute stops git from changing a file; the check finds a
+# file that was written wrong in the first place.
+*.PAS  -text
+*.ASM  -text
+*.INC  -text
+*.BAT  -text
+*.CFG  -text
+*.MAP  -text
+*.TPU  -text
+*.OBJ  -text
+*.OVL  -text
+*.EXE  -text
+*.DAT  -text
+*.MOD  -text
+*.bin  -text
+
+# Documents are UTF-8 and LF, which is the other half of encaudit.py's
+# convention.
+*.md   text eol=lf
+*.toml text eol=lf

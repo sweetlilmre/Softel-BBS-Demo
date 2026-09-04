@@ -1,0 +1,22 @@
+.claude
+.mcp.json
+.venv/
+build/
+
+# Ghidra's lock files are per-process, not part of the disassembly. The
+# database under Softel.rep/ IS the work and is tracked; a committed lock makes
+# the project look open in somebody else's checkout.
+ghidra/*.lock
+ghidra/*.lock~
+
+# Machine paths. Never committed.
+kit.local.toml
+
+# Ghidra's project is an instrument's WORKING STATE, not the record. 1.75M of
+# it was tracked for four commits; the database held 0 functions and 1 symbol,
+# so every tracked byte was derived from bin/SOFTEL.EXE plus the loader's
+# defaults and carried no human knowledge at all. It is also locked and
+# mutating while Ghidra is open, so a commit of it is a snapshot of a moving
+# file. What Ghidra told us is in link.toml, kit.toml and status.toml as text.
+# CLAUDE.md says how to recreate the project.
+ghidra/
