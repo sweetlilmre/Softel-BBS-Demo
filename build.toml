@@ -51,6 +51,14 @@ dialect = "tp6"
 # (POP BP) and that adding /$G+ changes exactly one byte in the probe, `5d` to
 # `c9`. So the DEFAULT is measurably wrong here and $G+ is measurably right.
 #
+# /$I- IS ASSERTED, AND THE ARITHMETIC IS EXACT. Under $I+ -- TPC's default --
+# every I/O operation is followed by a five-byte call to the runtime's result
+# check. LoadData performs eight checked operations (Reset, six BlockReads and
+# Close) and was exactly 40 bytes over the original; the extra call is visible
+# at LoadData+001eh, where the image goes straight to the next argument and
+# this reconstruction emitted lcall 04a9h. So the original does not check, and
+# nothing in it reads IOResult.
+#
 # /$O+ IS ASSERTED, AND IT IS THE ANSWER TO THE CALL-SITE GAP. Overlay code
 # generation is what makes TP6 copy a string constant into a stack temporary
 # SIZED TO THAT CONSTANT and pass the temporary, through a FAR call to an
@@ -81,13 +89,13 @@ dialect = "tp6"
 # SOFTEL's distribution has no TPC.CFG, so every one of those switches would
 # be a guess wearing the clothes of a fact. TPC's own defaults apply until
 # each is measured -- fpusites.py settles $N. $N is the one still open.
-switches = "/$G+ /$X+ /$O+ /GD /Q"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
 
 [compiler.tp61]
 # Turbo Pascal 6.01, declared so the patch level can be measured rather than
 # argued. Same reasoning on switches.
 dialect = "tp6"
-switches = "/$G+ /$X+ /$O+ /GD /Q"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
 
 [assembler]
 # Nothing here assembles yet. GoldPlay's PLAY.ASM is THEIRS and is not built:
@@ -158,7 +166,7 @@ switches = "/$G+ /$X+ /$V- /GD /Q"
 # emits the original's eighteen-byte call site. The image's copyright string
 # says 1983,90 which is TP6, so a match here would be a contradiction worth
 # knowing about rather than a conclusion. Never the build default.
-switches = "/$G+ /$X+ /$O+ /GD /Q"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
 
 [compiler.tp6_a]
 # A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
@@ -214,7 +222,7 @@ switches = "/$G+ /$X+ /$L- /GD /Q"
 # probecheck answer "does any single TP6 switch change how a string constant
 # is passed" in one run instead of ten arguments. Never the build default.
 dialect  = "tp6"
-switches = "/$G+ /$X+ /$O+ /GD /Q"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
 
 [compiler.tp6_n]
 # A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
