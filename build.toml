@@ -137,3 +137,10 @@ switches = "/$S- /GD /Q"
 # in a frame teardown. See probes/STACKCHK.PAS.
 dialect  = "tp6"
 switches = "/$S+ /$G+ /GD /Q"
+
+[compiler.tp6_vm]
+# /$V- alongside the asserted line: var-string checking off. The last
+# string-related switch this target has not measured. See
+# probes/STRLIT.PAS and the register's strconst-temp-helper-096d.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$V- /GD /Q"

@@ -20,3 +20,7 @@ kit.local.toml
 # file. What Ghidra told us is in link.toml, kit.toml and status.toml as text.
 # CLAUDE.md says how to recreate the project.
 ghidra/
+
+# The watched-run staging area: everything in it is copied from bin/ and
+# build/, and DOSBOX.CONF is generated because it carries a machine path.
+run/
