@@ -18,7 +18,9 @@ A reconstruction of **SOFTEL.EXE**, the second demo by Asphyxia (Denthor / EzE /
 | compiler | Borland / Turbo Pascal 6 (`Portions Copyright (c) 1983,90 Borland` at file offset `0x2489`) |
 | disassembly | `ghidra/` — **untracked**, and recreatable; see below |
 
-**`bin/SOFTEL.OVL` is not ours.** It is byte-identical to `goldplay/v1.00/GOLDPLAY.OVL` — the stock GoldPlay v1.00 overlay by The CodeBlasters, unmodified. It is a build **input**, never a reconstruction target, and `goldplay/` as a whole is read-only reference (both `v1.00` and `v1.01`; the demo shipped v1.00). Do not point `layout.src` at it — the wizard proposes it on `shape only` evidence and is wrong.
+**`bin/SOFTEL.OVL` is not ours.** It is byte-identical to `goldplay/v1.00/GOLDPLAY.OVL` — the stock GoldPlay v1.00 overlay by The CodeBlasters, unmodified. It is runtime **data** the player loads from disk, never compiled from anything here and never a reconstruction target. `goldplay/` as a whole is read-only reference (both `v1.00` and `v1.01`; the demo shipped v1.00). Do not point `layout.src` at it — the wizard proposes it on `shape only` evidence and is wrong.
+
+**`GOLDPLAY.TPU` used to be a build input and is not one any more.** `src/GOLDPLAY.PAS` reconstructs the unit from `goldplay/v1.01/goldplay.pas` — the nearest release that ships source — and compiles to a code block byte-identical to the shipped v1.00 TPU's. Three measured changes close the gap: `$B+`, the guard's term order in `StartPlaying`/`StopPlaying`/`DeAlloc`, and `$I+` at `Reset`. The header of that file carries the evidence for each. So `build.toml` stages nothing alongside, `wipe_tpu` is back on, and the reconstruction has **no unbuildable dependency left** — which is what makes the pushed repository buildable from a clean checkout, `goldplay/` aside.
 
 `bin/SOFTEL.DAT` is data loaded at runtime (`softel.dat`), `bin/PATEGA.MOD` the ProTracker module GoldPlay plays.
 
@@ -66,14 +68,15 @@ Measured, and it does NOT match Ghidra's block boundaries — see below.
 
 ## What is actually ours to write
 
-Two segments, and no more:
+Three segments, and no more. Two are ours in authorship; the third is somebody else's code that we nonetheless build:
 
 | | |
 |---|---|
 | `1000` | the program, `0x1600` bytes |
 | `118a` | one unit, `0x8b` bytes of code |
+| `1160` | **GoldPlay**, `0x29f` bytes — The CodeBlasters', not ours, but `src/GOLDPLAY.PAS` rebuilds it byte for byte |
 
-Everything else in the image belongs to somebody else — `11f5` is `System`, `1193` is `Crt`, `1160` is stock GoldPlay, `12eb` is DGROUP. That is the whole scope of the reconstruction.
+Everything else in the image belongs to somebody else and is not built here — `11f5` is `System`, `1193` is `Crt`, `12eb` is DGROUP. That is the whole scope of the reconstruction.
 
 `118a`'s five routines, read off the disassembly:
 
@@ -133,6 +136,13 @@ recomputed rather than read back. `mapcmp`: 5 units exact. `spans`: 11952 of
 chosen: `/$G+ /$X+ /$O+ /$I- /GD /Q`, plus `{$S-}` and
 `{$M 4000,0,200000}` in the source. Change any one and it stops matching. The
 register records what each was measured against.
+
+**And the build has no unbuildable input left.** `src/GOLDPLAY.PAS`
+reconstructs GoldPlay's unit from `goldplay/v1.01/goldplay.pas` and compiles to
+a code block byte-identical to the shipped v1.00 TPU's, so `build.toml` stages
+nothing alongside and `wipe_tpu` is back on. Three source-level directives
+carry that unit and are measured, not chosen: `$B+`, `$I+`, and the term order
+of one guard. `units.toml` checks segment `1160` alongside `118a`.
 
 ## The things that were not guessable
 
@@ -197,14 +207,15 @@ Measured, and it does NOT match Ghidra's block boundaries — see below.
 
 ## What is actually ours to write
 
-Two segments, and no more:
+Three segments, and no more. Two are ours in authorship; the third is somebody else's code that we nonetheless build:
 
 | | |
 |---|---|
 | `1000` | the program, `0x1600` bytes |
 | `118a` | one unit, `0x8b` bytes of code |
+| `1160` | **GoldPlay**, `0x29f` bytes — The CodeBlasters', not ours, but `src/GOLDPLAY.PAS` rebuilds it byte for byte |
 
-Everything else in the image belongs to somebody else — `11f5` is `System`, `1193` is `Crt`, `1160` is stock GoldPlay, `12eb` is DGROUP. That is the whole scope of the reconstruction.
+Everything else in the image belongs to somebody else and is not built here — `11f5` is `System`, `1193` is `Crt`, `12eb` is DGROUP. That is the whole scope of the reconstruction.
 
 `118a`'s five routines, read off the disassembly:
 

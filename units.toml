@@ -10,3 +10,11 @@ rewrites = []
 # unit that compiles shorter is compared over the overlap rather than failed.
 segment = 0x118A
 length  = 139
+
+[unit.GOLDPLAY]
+# Reconstructed from goldplay/v1.01's goldplay.pas -- v1.00 ships no source.
+# The segment's extent is 0x2a0; `length` drops the single byte of linker
+# padding at 029f. Not ours in authorship, but it IS ours to build now, and
+# this is the check that says the reconstruction still reproduces it.
+segment = 0x1160
+length  = 671

@@ -11,16 +11,15 @@
 
 src     = "src"
 
-# THE .TPU WIPE IS OFF, AND IT HAD TO BE. build.py writes `del *.TPU` into
-# BUILD.BAT so a failed compile cannot be measured against a stale unit -- but
-# that runs inside DOSBox AFTER staging, so it deleted the staged
-# GOLDPLAY.TPU, which is a build INPUT that cannot be regenerated (v1.00 ships
-# no goldplay.pas). The error it produced was `File not found (GOLDPLAY.TPU)`
-# on the uses clause, which reads as a missing file rather than a deleted one.
-# The protection is not lost: units.toml sets `sources`, so units.py refuses a
-# STALE build rather than measuring it, which is the check that actually
-# guards a measurement. A kit fix would exempt staged inputs from the wipe.
-wipe_tpu = false
+# THE .TPU WIPE IS BACK ON. It had to be off while GOLDPLAY.TPU was staged as
+# a build input: build.py writes `del *.TPU` into BUILD.BAT, that runs inside
+# DOSBox AFTER staging, and it deleted the one file that could not be
+# regenerated -- reported as `File not found (GOLDPLAY.TPU)` on the uses
+# clause, which reads as a missing file rather than a deleted one. Now that
+# src/GOLDPLAY.PAS rebuilds the unit, nothing staged is irreplaceable and the
+# wipe does what it is for: a failed compile cannot be measured against a
+# stale unit. Verified by rebuilding to R7 with it on.
+wipe_tpu = true
 build   = "build"
 title   = "Softel build"
 drive   = "D"
@@ -109,6 +108,9 @@ flags = "/la /m2"
 # about which unit must precede which, and there is nothing yet to judge.
 mode = "declared"
 list = [
+  "GOLDPLAY.PAS", # 1160  the player unit, reconstructed. Must precede the
+                  #       program; the segment order in the image is
+                  #       1160 GOLDPLAY, 118a SCREEN, so this compiles first
   "SCREEN.PAS",   # 118a  the virtual-screen unit -- uses nothing, so it is a
                   #       leaf and needs no ordering decision
   "SOFTEL.PAS",   # 1000  the program
@@ -120,12 +122,15 @@ list = [
 # survive becomes visible here rather than as an error forty lines away.
 encoding = "cp437"
 
-# GOLDPLAY.TPU is a BUILD INPUT and cannot be rebuilt: goldplay/v1.00 ships no
-# goldplay.pas, only the compiled unit, the object and the example program. It
-# is staged so `uses GoldPlay` resolves. bin/SOFTEL.OVL is byte-identical to
-# the v1.00 overlay beside it, which is what says the demo shipped this
-# version unmodified.
-alongside = ["goldplay/v1.00/GOLDPLAY.TPU"]
+# NOTHING is staged alongside any more. GOLDPLAY.TPU used to be, because
+# goldplay/v1.00 ships no goldplay.pas and the compiled unit was the only way
+# to resolve `uses GoldPlay`. src/GOLDPLAY.PAS now rebuilds that unit's code
+# block byte for byte, so the shipped TPU is no longer an input and the
+# reconstruction has no unbuildable dependency left. bin/SOFTEL.OVL is still
+# byte-identical to the v1.00 overlay, which is what says the demo shipped
+# that version unmodified -- the OVL is data the player loads at runtime and
+# was never compiled from anything here.
+alongside = []
 
 [names]
 # source name -> 8.3 name, where they differ. Empty until src/ has files.
