@@ -561,10 +561,16 @@ end;
 { [re] @asm 000 1000:05e0 }
 procedure ShowLineReverse(S : String);
 var
-  I    : Byte;
-  N    : Integer;
-  X    : Integer;
-  Line : String;
+  { [re] FOUR WORD locals, and the offsets are measured: the original stores
+    Length(S) as a word at [bp-0102h] and again at [bp-0106h], so the counter
+    and the index are both words and one word at -0104h sits between them
+    unused. X is the fourth, at -0108h. That is the eight scalar bytes of
+    enter 0208h. The Byte counter this file had made the frame two short. }
+  I     : Integer;
+  U0104 : Integer;
+  N     : Integer;
+  X     : Integer;
+  Line  : String;
 begin
   if KeyPressed or (Faded <> 0) then Exit;
   I := Length(S);
