@@ -34,3 +34,7 @@ probes/out/
 # of the method and belong in neither src/ nor kit/. Anything here that turns
 # out to matter gets moved into the record as prose or as a marker.
 temp/
+
+# asmgen.py's scratch folder. The kit tool names it via [assembler].workdir and
+# defaults to this; it is wiped and rewritten on every assemble.
+asmwork/
