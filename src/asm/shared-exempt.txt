@@ -1,0 +1,7 @@
+# shared_asm.py exemptions: assembler bodies that are duplicated between units
+# and are NOT to become one text. One `UNIT.Routine` per line.
+#
+# Empty, and deliberately so. An exemption copied from another target is one
+# that cannot fail, which reads as a checked duplicate while checking nothing.
+# A name earns a line here only once THIS target has a duplicate whose two
+# declarations differ -- and then with the reason beside it.
