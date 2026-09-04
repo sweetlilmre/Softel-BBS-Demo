@@ -39,6 +39,13 @@ program Softel;
   is `enter 6,0`, and 03ae is a bare `push bp / mov bp,sp` -- no check on any
   of them. That seven bytes per framed routine was the uniform +7 this
   reconstruction carried on every routine measured against the original. }
+{ [re] THE MEMORY DIRECTIVE IS TESTPLAY.PAS's, kept as GoldPlay's example
+  wrote it -- `Not more heap than needed`. The MZ header says so: the image
+  starts SS:SP at 06c6:0fa0, and 0fa0h is 4000, the stack figure. The heap
+  maximum is NOT TestPlay's 40000: maxalloc less minalloc is 35a4h - 04d0h =
+  12500 paragraphs, which is 200000 bytes. TestPlay's figure gave 2500
+  paragraphs and left maxalloc wrong by four bytes of header. }
+{$M 4000,0,200000}
 {$S-}
 
 uses Crt, Screen, GoldPlay;
@@ -323,7 +330,15 @@ end;
 { [re] @asm 000 1000:013e }
 procedure DrawFrame(N : Byte);
 var
-  I : Byte;
+  { [re] enter 6: the counter is a BYTE at [bp-1] and there are two WORDS at
+    [bp-4] and [bp-6]. The original reads each field into its own local and
+    RECOMPUTES the whole address for the second -- two full
+    les di,[0329ah] / add di,ax / add di,dx sequences, one per field. That
+    repetition is the twelve bytes this reconstruction was short, and it is
+    why passing the two subscripted fields straight to PutSprite is wrong. }
+  I  : Byte;
+  PX : Word;
+  PY : Word;
 begin
   { [re] The original's frame is enter 6 -- one byte for the counter and FOUR
     more -- and a `with` gives exactly that length, 111 of 111. But it is the
@@ -333,7 +348,11 @@ begin
     are a value local, not a pointer. Tried and reverted: matching the length
     with the wrong instructions took spans DOWN, from 11491 aligned to 11481. }
   for I := 1 to 51 do
-    PutSprite(Path^[N][I].X, Path^[N][I].Y, Blip, BufSeg);
+    begin
+      PX := Path^[N][I].X;
+      PY := Path^[N][I].Y;
+      PutSprite(PX, PY, Blip, BufSeg);
+    end;
 end;
 
 { [re] 1000:01ad. One palette entry: the colour index to the DAC write port
@@ -539,7 +558,11 @@ begin
     Blit(VirtualSeg, BufSeg);
     PutStrip(7, 20, Work, BufSeg);
     PutGlyph(Ord(Line[I]), X);
-    if I < Length(S) then X := X + 17;
+    { [re] Inc, not an assignment. The original emits
+      add word ptr [bp-0108h],11h -- one in-place add of five bytes -- where
+      X := X + 17 loads, adds and stores in eleven. Six bytes, in each of the
+      two mirrors. }
+    if I < Length(S) then Inc(X, 17);
     DrawFrame(Frame);
     Inc(Frame);
     if Frame > 72 then Frame := 1;
@@ -585,7 +608,7 @@ begin
     Blit(VirtualSeg, BufSeg);
     PutStrip(7, 20, Work, BufSeg);
     PutGlyph(Ord(Line[I]), X);
-    if N > 1 then X := X - 17;
+    if N > 1 then Dec(X, 17);
     DrawFrame(Frame);
     Inc(Frame);
     if Frame > 72 then Frame := 1;
@@ -646,9 +669,9 @@ var
     stores Length(S) as a word at [bp-0108h], loads 1 into AX, compares with
     cmp ax,[bp-0108h] and branches with JG -- a SIGNED word test. Byte locals
     gave mov al / cmp al / JA, unsigned and eight bytes shorter. }
-  Left : Integer;
-  Row  : Integer;
   Pos  : Integer;
+  Row  : Integer;
+  Left : Integer;
 begin
   Left := 0;
   for Pos := 1 to Length(S) do

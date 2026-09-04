@@ -117,6 +117,137 @@ Proven working under both `tp6` and `tp61`. DOSBox-X and four Turbo Pascal trees
 
 `link.toml` holds the layout, every address in it measured. Its `map` key names `build/SOFTEL.MAP`, which does not exist yet — there is no `SOFTEL.PAS` to compile. That is a to-do, not a silence.
 
+## Where the reconstruction stands: R7
+
+**The rebuild is byte-identical to the shipped 1993 binary.**
+`md5 7c4350cb3e664c942149feef990f3801` for `ref/softel.bin`, `bin/SOFTEL.EXE`
+and `build/SOFTEL.EXE` alike. `artefact.py --check` reports **R7 holds**,
+recomputed rather than read back. `mapcmp`: 5 units exact. `spans`: 11952 of
+11952, 100.0%. Behaviourally it was already **R3** from a watched run on
+4 Sep 2026.
+
+    .venv/Scripts/python.exe kit/tools/pascal/build.py build.toml
+    .venv/Scripts/python.exe kit/tools/pascal/artefact.py status.toml --check
+
+**The switch line is load-bearing and every switch on it was measured**, not
+chosen: `/$G+ /$X+ /$O+ /$I- /GD /Q`, plus `{$S-}` and
+`{$M 4000,0,200000}` in the source. Change any one and it stops matching. The
+register records what each was measured against.
+
+## The things that were not guessable
+
+Kept because each cost real time to find and none is visible in the source:
+
+- **`{$O+}`** makes TP6 copy a string constant into a stack temp *sized to
+  that constant* and pass it via a far call. Worth 610 bytes across 61 call
+  sites. Found by sweeping switches through `probecheck`, not by writing
+  probes.
+- **`{$I-}`** — under `$I+` every I/O operation carries a 5-byte result check.
+  `LoadData` has eight.
+- **A var block's ORDER is the frame layout.** TP6 allocates locals downward
+  in declaration order, so `[bp-n]` displacements are testable. `FadeStep`
+  became exact purely by declaring `Moved` before `I`; `FlyCredit`'s last 14
+  bytes were two locals the wrong way round.
+- **Each `enter` operand is an exact local-byte budget**, and unused locals are
+  real: `ShowLine` declares four bytes nothing reads, `ShowLineReverse` a word.
+- **`Inc(X, 17)` is not `X := X + 17`** — one in-place add of 5 bytes against
+  load/add/store in 11.
+- **Signed versus unsigned changes the compare.** `Word` counters give
+  `cmp al` / `JA`; `Integer` gives `cmp ax` / `JG`. And mixing a signed
+  `Integer` with an unsigned `Word` promotes the expression to `LongInt`,
+  which is what `PutGlyph`'s 32-bit index arithmetic is.
+- **Term order matters**: only `X + J + I * 306` emits the original's
+  instruction order.
+- **`with` is visible in the bytes** — a far pointer stored and reloaded per
+  field. That is what proves `TRGB` is a record, and what `DrawFrame` does
+  *not* do.
+- **A set is not `Pos`.** `Music in ['N','Y']` pulls in 346 bytes of runtime
+  set support; the 32 bytes at `1000:08e9` decode as a `set of Char`.
+- **The compiler is TP 6.0, not 6.01** — `TURBO.TPL` carries
+  `Portions Copyright (c) 1983,90 Borland`, byte for byte what the image holds
+  at `0x2489`. Check strings before measuring bytes.
+
+## The segmentation
+
+Measured, and it does NOT match Ghidra's block boundaries — see below.
+
+| segment | extent | what it is |
+|---|---|---|
+| `1000` | `0x1600` | the PROGRAM. No far return, which is correct: a program body ends in the runtime's halt |
+| `1160` | `0x2a0` | **GOLDPLAY** — 671 bytes of code, 1 byte of linker padding |
+| `118a` | `0x90` | **OURS** — `src/SCREEN.PAS`, and its code is the original's bytes. 5 routines, `0x8b` + 5 pad |
+| `1193` | `0x620` | the RTL's **Crt** unit — not ours to transcribe |
+| `11f5` | `0xf60` | the Turbo Pascal runtime |
+| `12eb` | `0x50` | **DGROUP's initialised head** — 79 zero bytes and one `02`, and the last thing in the file |
+| BSS | from `12eb:0050` | not in the file at all. `0x4d00` = 19712 bytes, EXACTLY the MZ `minalloc` |
+
+**Ghidra's blocks are 16 bytes out, and it misleads twice.** Its `CODE_0` runs to `1000:160f` and its `CODE_1` starts at `1160:0010`. Both are wrong: the program ends at `1000:15ff`, and the GoldPlay unit begins at `1160:0000`. Taking Ghidra's boundaries hides GoldPlay's whole first routine — which the program calls — and lends the program a far return that is really that routine's `RETF`.
+
+**`1160` is GoldPlay by measurement, not inference.** `align.locate` puts the segment at offset 960 of `goldplay/v1.00/GOLDPLAY.TPU`, where that TPU's symbol names stop and its code starts. Across 672 bytes the two differ in 105 runs and no run exceeds 4 bytes — 20 of width 4, 71 of width 2, 14 of width 1 — and 104 of the 105 are zero in the TPU, the addend left for whoever resolves the reference. The EXE's relocation table holds exactly 20 entries in this segment, one per 4-byte far pointer; the 2-byte runs are DGROUP offsets and the 1-byte runs near displacements, both resolved at link time and so absent from a load-time table.
+
+**Two traps in reading this image.**
+
+*`survey.py`'s framed return count is not a census, and since kit `fee3f0b` it says so.* Its anchored scan cannot see a frameless routine — one reading parameters off `ss:[bx+n]` — so it prints a separate **upper bound** beside the certain count. Read the bound as direction and magnitude: `1193` is 2 framed against 11+14 candidates and holds roughly thirty assembler routines, while `1160` is 9 and 0 and really does hold nine.
+
+*Do not infer code-versus-data from relocation counts.* `11f5` is the target of 149 of the 191 fixups, which reads like a data group being addressed and is in fact a runtime being called — a fixup naming a far `CALL` target is indistinguishable from one naming a data word. That reading was made and withdrawn; `plan.py --report` carries it under `segment-inventory`.
+
+*A near-zero region matches any other near-zero region.* `12eb` scores 100% against `GOLDPLAY.TPU`. It is 79 zeros and one `02`.
+
+**The load image ends exactly at `12eb:0050`.** 12032 image bytes, and `12eb:0050` in image coordinates is `0x2f00` = 12032. So `12eb` is DGROUP: 80 bytes of initialised data in the file, then BSS. Ghidra calls those 80 bytes `CODE_5` because four fixups name paragraph `02eb` — but those are references *to* the data group (a `MOV AX,DGROUP` loading DS), not code inside it. Twice now on this target, reading a segment's role off relocation data has been wrong.
+
+## What is actually ours to write
+
+Two segments, and no more:
+
+| | |
+|---|---|
+| `1000` | the program, `0x1600` bytes |
+| `118a` | one unit, `0x8b` bytes of code |
+
+Everything else in the image belongs to somebody else — `11f5` is `System`, `1193` is `Crt`, `1160` is stock GoldPlay, `12eb` is DGROUP. That is the whole scope of the reconstruction.
+
+`118a`'s five routines, read off the disassembly:
+
+| offset | what it does |
+|---|---|
+| `0000` | `procedure(destSeg, srcSeg)` — `rep movsw`, `cx=0x7d00` = 64000 bytes = one 320×200 screen. A flip or copy. `retf 4` |
+| `0024` | `mov ax,0x13; int 0x10; retf` — set mode 13h. **Frameless**, 5 bytes |
+| `002a` | `GetMem(64000)` into the pointer at `[0x351e]`, then `FillChar(p,64000,0)` — allocate and clear the virtual screen |
+| `005e` | `FreeMem(p, 64000)` |
+| `007a` | the unit's init, reached from the startup at `0f9e` |
+
+## The original was compiled `$S+`, and that is measured
+
+`118a`'s framed routines open `55 89 e5 31 c0 9a df 04 f5 01` — `push bp; mov bp,sp; xor ax,ax; lcall 01f5:04df`. `probes/STACKCHK.PAS` through `codegen.py` shows `/$S+` emitting exactly that sequence with the far pointer unresolved, and `/$S-` emitting no call at all. The probe's second routine pins it further: with 402 bytes of locals, `$S+` gives `mov ax,0x192; lcall; sub sp,0x192`, so the operand is the frame size and `xor ax,ax` means a frame of zero — correct for a routine with parameters and no locals. **`01f5:04df` is the RTL stack check.**
+
+`$S+` is TPC's own default — `probecheck` gives 128 bytes for `tp6` on defaults and for `/$S+`, against 96 for `/$S-` — so `build.toml`'s assert-nothing switch line already emits this. `$G` and `$N` remain unmeasured.
+
+GoldPlay was compiled `$S-`: no `04df` call anywhere in segment `1160`. It is linked as a prebuilt `.TPU`, so its switches are not ours to match — but that contrast is what made the prologue worth probing.
+
+## The main program came from GoldPlay's example
+
+`bin/SOFTEL.EXE` holds `Module Not Found` at `1000:0920`, verbatim from `goldplay/v1.00/TESTPLAY.PAS`. Read that file before reading the program's startup: it is the shape the demo was written from. Note that `LoadOvl` there is a **GoldPlay procedure**, not Turbo Pascal's overlay manager — `SOFTEL.OVL` is GoldPlay's own player core, loaded by its own code at runtime, and the unit is linked into the EXE like any other.
+
+The startup at `1000:0f94` calls `01f5:0000` (the runtime's init), then `0193:0000` and `018a:007a` — the unit inits, in link order.
+
+## Building it
+
+    .venv/Scripts/python.exe kit/tools/pascal/build.py build.toml --selftest
+
+Proven working under both `tp6` and `tp61`. DOSBox-X and four Turbo Pascal trees (`TP600`, `TP601`, `TP700`, `TP701`) plus `TASM` are already installed on this machine; `kit.local.toml` names them and is **never committed**. `build.toml` is committed and holds no machine path.
+
+**The switch line is `/$G+ /GD /Q`.** `$G+` is asserted on evidence — the original tears frames down with `c9` (`LEAVE`, an 80186/286 instruction) and the probe shows `/$S+` alone emitting `5d` (`POP BP`), with `/$G+` changing exactly one byte in 128. `$S` is deliberately *not* asserted, which is the opposite case: `$S+` is TPC's default **and** what the original shows, so naming it would add a switch that changes nothing. `$N` is the one code-generation switch still unmeasured. `/GD` gets the detailed `.MAP` that `link.toml` needs. `build.py` warns that a wrong switch line does not fail — it produces a build that *measures* wrong — and SOFTEL's distribution carries no `TPC.CFG`, so every switch has to be measured rather than read.
+
+**Order matters: build, then `markers.py --emit`, then `ratchet.py --measured`.** `build.py` wipes the staging directory, so a `measured.toml` emitted before a build is deleted by it. `ratchet` refuses a missing file rather than reading it as empty, which is how this gets caught.
+
+**No `binpath` in `build.toml`.** The kit derives the DOS bin directory from `toolchain.<compiler>` in `kit.local.toml` — the answer that invokes the compiler — so there is no typed copy to go stale. Do not add one back: the kit's observation `typed-copy-of-a-derived-path` measured 15 stale entries across five configs in the sibling consumer, wrong for as long as a rename was old, while every check passed. A path used only to decorate an environment fails at a moment nobody is watching.
+
+**One trap, and it is the harness rather than the shell.** Every `\\` pair in a Bash tool command collapses to one `\` before bash sees it — measured: `\`→`\`, `\\`→`\`, `\\\`→`\\`, `\\\\`→`\\`, while `\t` and `\'` pass through untouched. Quoting the heredoc delimiter does not prevent it. So **do not double a backslash**: a lone `\` arrives intact, and writing `'C:\\TP600'` — correct POSIX practice — is exactly what silently halved these paths into invalid TOML. Both config files now use TOML literal strings with single separators (`'C:\TP600'`). If a consumer itself wants `\\` (a Python literal, an awk or sed regex) send four.
+
+**And commands truncate above ~8KB**, which surfaces as `unexpected EOF while looking for matching '` — an error naming quoting rather than size. Write file content with the Write tool and run it; keep heredocs to a few short lines.
+
+`link.toml` holds the layout, every address in it measured. Its `map` key names `build/SOFTEL.MAP`, which does not exist yet — there is no `SOFTEL.PAS` to compile. That is a to-do, not a silence.
+
 ## Where the reconstruction stands
 
 **R3 — a viewer sees no difference.** Recorded 4 Sep 2026 from a watched run:
