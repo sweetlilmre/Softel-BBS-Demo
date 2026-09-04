@@ -662,7 +662,13 @@ begin
   Write('Do you want music? (y/n) : ');
   repeat
     Music := UpCase(ReadKey);
-  until Pos(Music, 'YN') <> 0;
+  { [re] A SET, not Pos, and the constant settles it. The 32 bytes at
+    1000:08e9 are a set of Char whose only members are N and Y -- 32 bytes is
+    a Pascal set over 256 elements, and 01f5:0c22 is the membership test. The
+    Pos spelling this file used pulled none of the runtime's set support, and
+    that support is a single 346-byte block at 01f5:0b74 which the original
+    links and this reconstruction did not. }
+  until Music in ['N', 'Y'];
   Write(Music);
   WriteLn;
   if Music = 'Y' then
