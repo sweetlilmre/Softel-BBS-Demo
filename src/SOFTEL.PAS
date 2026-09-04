@@ -456,12 +456,20 @@ end;
 { [re] @asm 000 1000:03f5 }
 procedure PutGlyph(Ch : Byte; X : Word);
 var
-  I, J : Word;
+  { [re] INTEGER, not Word, and the destination arithmetic is what says so.
+    The original computes the strip index in 32 bits: it SIGN-extends [bp-4]
+    with cwd and ZERO-extends [bp+4] with xor dx,dx, then adds with adc. TP6
+    promotes to LongInt exactly when an expression mixes a signed Integer with
+    an unsigned Word, so the counters are signed and X -- the parameter -- is
+    not. Declared as Words this came out as plain 16-bit adds, which spanwhy
+    reported as one differing instruction that was also the upstream cause of
+    three further spans 562, 909 and 953 bytes downstream. }
+  I, J : Integer;
 begin
   for I := 1 to 16 do
     for J := 1 to 16 do
       if Font^[Ch][J][I] <> 0 then
-        Work[X + I * 306 + J] := Font^[Ch][J][I];
+        Work[X + J + I * 306] := Font^[Ch][J][I];
 end;
 
 { [re] 1000:04a1 and 1000:05e0 ARE MIRROR IMAGES and the difference is two
@@ -487,10 +495,20 @@ end;
 { [re] @asm 000 1000:04a1 }
 procedure ShowLine(S : String);
 var
-  I    : Byte;
-  N    : Byte;
-  X    : Integer;
-  Line : String;
+  { [re] THE FRAME IS enter 0208h: 256 for the value parameter's own copy,
+    EIGHT bytes of scalars, then 256 for Line. The scalars' offsets are
+    measured -- the original writes bytes at [bp-0101h] and [bp-0103h] and a
+    word at [bp-0108h] -- so the four bytes at -0102h and -0104h..-0106h are
+    declared and never read. Named for their offsets, like Unread3522 in
+    SCREEN.PAS: the position and the width are facts and the purpose is not. }
+  I     : Byte;
+  U0102 : Byte;
+  N     : Byte;
+  U0104 : Byte;
+  U0105 : Byte;
+  U0106 : Byte;
+  X     : Integer;
+  Line  : String;
 begin
   if KeyPressed or (Faded <> 0) then Exit;
   I := 1;
