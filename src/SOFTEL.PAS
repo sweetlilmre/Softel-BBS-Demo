@@ -19,8 +19,8 @@ program Softel;
 
   [re] STATE OF THIS FILE: the structure and the two long call sequences are
   transcribed and the shapes are read, but four routines are declared with
-  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB, MoveBlock
-  and FlyCredit. Their addresses are on the plan as
+  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB and
+  MoveBlock, all four of them assembler. Their addresses are on the plan as
   rows at R0. Nothing here should be read as a claim that the bytes match. }
 
 { [re] THE ORDER OF THIS CLAUSE IS MEASURED, not stylistic. Turbo Pascal 6
@@ -340,9 +340,48 @@ end;
 
   [re] The row comes FIRST: the body pushes it before the string.
 
-  NOT WRITTEN. }
+  [re] Both `if` guards in the decompilation are a for-loop's own entry test
+  rather than statements of their own. `if Length(S) <> 0` in front of the
+  counting pass is what `for Pos := 1 to Length(S)` emits, and
+  `if Y < 25` in front of the walk is what `for Row := 24 downto Y` emits --
+  24 >= Y being the condition to enter at all. Writing either as a real `if`
+  would emit the test twice.
+
+  [re] Crt.GotoXY takes (X, Y) here: at the call the position is pushed before
+  the row, which is the same push-order reading that corrected PutGlyph.
+
+  [re] Random(Length(S)) returns 0..Length-1 and the original adds one, so the
+  index is 1..Length. S is a value parameter and IS modified -- a placed
+  character is blanked in the local copy so it is not chosen twice, which is
+  what makes the outer loop terminate. }
 procedure FlyCredit(Y : Byte; S : String);
+var
+  Left : Integer;
+  Row  : Word;
+  Pos  : Byte;
 begin
+  Left := 0;
+  for Pos := 1 to Length(S) do
+    if S[Pos] <> ' ' then Inc(Left);
+  repeat
+    Pos := Random(Length(S)) + 1;
+    if S[Pos] <> ' ' then
+      begin
+        Dec(Left);
+        for Row := 24 downto Y do
+          begin
+            GotoXY(Pos, Row);
+            Write(S[Pos]);
+            if Row < 24 then
+              begin
+                GotoXY(Pos, Row + 1);
+                Write(' ');
+              end;
+            Delay(5);
+          end;
+        S[Pos] := ' ';
+      end;
+  until Left = 0;
 end;
 
 begin
