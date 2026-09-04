@@ -28,3 +28,9 @@ run/
 # codegen.py writes each probe compile here. Derived, and it changes on
 # every run -- a .TPU also embeds a timestamp, so it never compares equal.
 probes/out/
+
+# Scratch. One-off instruments and their outputs -- the goldplay-re scripts
+# name a third party's files and answer a question once, so they are not part
+# of the method and belong in neither src/ nor kit/. Anything here that turns
+# out to matter gets moved into the record as prose or as a marker.
+temp/
