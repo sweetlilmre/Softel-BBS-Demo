@@ -39,6 +39,9 @@ noseg = []
 # (build.py --selftest compiles under TP600 and TP601 and emits a detailed
 # .MAP) but it has no sources to compile. Any instrument reading this key
 # fails until there is a program to build -- which is a to-do, not a silence.
+# The built image in `layout.built`, which the cross-binary instruments
+# (dsmap, dspair, segpair, spans) open beside the original.
+exe        = "SOFTEL.EXE"
 map        = "build/SOFTEL.MAP"
 main_unit  = "SOFTEL"
 program_seg = 0x1000         # NAMED, never taken as segments[0]: position

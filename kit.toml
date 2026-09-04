@@ -52,6 +52,14 @@ first_para = 0x1000
 [target.original]
 "000" = "ref/softel.bin"
 
+# The RELEASE, part-keyed like the original above. This target shipped ONE
+# image and there is no separate released variant, so the two answers are the
+# same file -- said out loud rather than left unanswered, because a tool that
+# reads this key is asking "which binary did they ship" and the honest answer
+# here is "the same one we are rebuilding".
+[target.release]
+"000" = "ref/softel.bin"
+
 [encaudit]
 # encaudit.py finds text I/O that leans on the locale encoding, which on Windows
 # is cp1252 -- and the kit's own docstring records that mojibaking two documents

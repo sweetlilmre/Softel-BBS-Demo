@@ -22,10 +22,24 @@ var
     offset at $351e and segment at $3520. }
   Virtual : Pointer;
 
+  { [re] 1568 BYTES, AND THE SIZE IS MEASURED RATHER THAN GUESSED. dsmap.py
+    pairs every absolute data reference in the original with ours and reports
+    the shift: 88 sites from DS:$0003 up to and including Virtual at DS:$351e
+    carry a shift of ZERO, and every one of the 47 sites at DS:$3b42 and above
+    carried exactly -1568 until this was declared. The boundary is where the
+    shift changes, and it falls between these two variables, so what is
+    missing sits here and is 1568 bytes wide.
+
+    WHAT IT IS remains unknown, and the name says so rather than implying a
+    use. No instruction in this unit touches it and none in the program does
+    either, so a load image cannot say what it held -- only where it was and
+    how big. Do not give it a type or a name that claims more than that: the
+    kit's own rule is that a name should be no stronger than the evidence, and
+    the evidence here is an address and a length. }
+  Unread3522 : array [1..1568] of Byte;
+
   { [re] DS:$3b42. Written once, immediately after the allocation, from the
-    segment half of Virtual. Its distance from Virtual is 0x622 bytes, which
-    no declaration here accounts for -- see the note at the end of this
-    interface. }
+    segment half of Virtual. }
   VirtualSeg : Word;
 
 { Copy one whole 320x200 screen. Src and Dst are SEGMENTS, not pointers. }
@@ -40,26 +54,20 @@ procedure OpenVirtual;
 { Release it. }
 procedure CloseVirtual;
 
-{ [re] THE GAP BETWEEN THE TWO VARIABLES IS NOT EXPLAINED, and it is the one
-  thing in this file that is known to be incomplete rather than merely
-  unverified. The addresses are recorded on the declarations above and are
-  deliberately not repeated here, so dsgaps.py maps each of them once. The
-  distance between the two is 1572 bytes and nothing above declares anything
-  to fill it. Three
-  readings, and none is settled:
+{ [re] THE GAP IS NOW MEASURED AND DECLARED, and the way it was settled is
+  worth keeping because the earlier reading of it was wrong in an instructive
+  way. This file used to say the distance was 1572 bytes and offered three
+  candidate explanations, one of which was that VirtualSeg might belong to
+  another unit entirely.
 
-    - this unit declares something else between them that the code never
-      touches, so no instruction names it and no disassembly can see it;
-    - VirtualSeg is not this unit's variable at all, and the write at $3b42
-      reaches a global some other unit exports;
-    - the two are in different units' variable blocks and one of these two
-      declarations belongs elsewhere.
+  It is 1568, it is this unit's, and dsmap.py said so in one run: the shift
+  it reports is zero for all 88 sites up to Virtual and exactly -1568 for all
+  47 at VirtualSeg and above. A boundary in that table is worth more than any
+  amount of reading around the addresses -- which is what the instrument's own
+  docstring says, and this target had been doing the reading instead.
 
-  Do not guess a filler array to close it. dsmap.py pairs every absolute data
-  reference with ours and reports the SHIFT, and a run of one non-zero shift
-  names the declaration before it as the wrong size; dsgaps.py reads the
-  DS:$ addresses in these comments against the ORIGINAL and needs no build at
-  all. Measure it, then declare it. }
+  The four-byte discrepancy in the old note came from subtracting the two
+  addresses and forgetting that Virtual is four bytes wide. }
 
 implementation
 

@@ -141,8 +141,8 @@ end;
 { [re] @asm 000 1000:000e }
 function FadeStep : Boolean;
 var
-  I     : Word;
   Moved : Boolean;
+  I     : Word;
 begin
   Moved := False;
   for I := 1 to 255 do
@@ -433,7 +433,7 @@ end;
 { [re] @asm 000 1000:03f5 }
 procedure PutGlyph(Ch : Byte; X : Word);
 var
-  I, J : Byte;
+  I, J : Word;
 begin
   for I := 1 to 16 do
     for J := 1 to 16 do
@@ -464,10 +464,10 @@ end;
 { [re] @asm 000 1000:04a1 }
 procedure ShowLine(S : String);
 var
-  Line : String;
-  X    : Integer;
-  N    : Byte;
   I    : Byte;
+  N    : Byte;
+  X    : Integer;
+  Line : String;
 begin
   if KeyPressed or (Faded <> 0) then Exit;
   I := 1;
@@ -504,10 +504,10 @@ end;
 { [re] @asm 000 1000:05e0 }
 procedure ShowLineReverse(S : String);
 var
-  Line : String;
-  X    : Integer;
-  N    : Integer;
   I    : Byte;
+  N    : Integer;
+  X    : Integer;
+  Line : String;
 begin
   if KeyPressed or (Faded <> 0) then Exit;
   I := Length(S);
