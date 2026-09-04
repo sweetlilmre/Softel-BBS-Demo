@@ -642,9 +642,13 @@ end;
 { [re] @asm 000 1000:07c0 }
 procedure FlyCredit(Y : Byte; S : String);
 var
+  { [re] WORD locals throughout, and the counting loop shows it: the original
+    stores Length(S) as a word at [bp-0108h], loads 1 into AX, compares with
+    cmp ax,[bp-0108h] and branches with JG -- a SIGNED word test. Byte locals
+    gave mov al / cmp al / JA, unsigned and eight bytes shorter. }
   Left : Integer;
-  Row  : Word;
-  Pos  : Byte;
+  Row  : Integer;
+  Pos  : Integer;
 begin
   Left := 0;
   for Pos := 1 to Length(S) do
