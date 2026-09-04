@@ -45,7 +45,15 @@ uses Crt, Screen, GoldPlay;
 
 type
   { [re] 768 bytes at DS:$004a, walked 0..255 by SetPalette. }
-  TRGB     = array [0..2] of Byte;
+  { [re] A RECORD, and SetPalette's `with` is what says so. The original
+    stores a far pointer to P[I] in a four-byte local and RELOADS it for each
+    of the three fields -- les di,[bp-0306h] three times, then es:[di],
+    es:[di+1], es:[di+2] -- which is how Turbo Pascal implements `with`, and
+    `with` needs a record. The frame confirms it: enter 0306h is 768 for the
+    value parameter's copy, 2 for the counter and 4 for the with-pointer. }
+  TRGB     = record
+               R, G, B : Byte;
+             end;
   TPalette = array [0..255] of TRGB;
 
   { [re] 5508 bytes. PutGlyph writes it with a stride of 306, and
@@ -170,9 +178,9 @@ begin
   Moved := False;
   for I := 1 to 255 do
     begin
-      if Pal[I][0] > 1 then begin Moved := True; Dec(Pal[I][0]); end;
-      if Pal[I][1] > 1 then begin Moved := True; Dec(Pal[I][1]); end;
-      if Pal[I][2] > 1 then begin Moved := True; Dec(Pal[I][2]); end;
+      if Pal[I].R > 1 then begin Moved := True; Dec(Pal[I].R); end;
+      if Pal[I].G > 1 then begin Moved := True; Dec(Pal[I].G); end;
+      if Pal[I].B > 1 then begin Moved := True; Dec(Pal[I].B); end;
     end;
   FadeStep := Moved;
 end;
@@ -351,7 +359,8 @@ var
   I : Word;
 begin
   for I := 0 to 255 do
-    SetRGB(I, P[I][0], P[I][1], P[I][2]);
+    with P[I] do
+      SetRGB(I, R, G, B);
 end;
 
 { [re] 1000:0231 IS THE DEMO'S CLOCK, and its parameter is VAR -- it writes
@@ -401,7 +410,7 @@ begin
       FillChar(P[191], 3, 0);
       FillChar(P[192], 3, 0);
     end;
-  if (P[1][0] = 0) and (P[1][2] = 0) and (P[1][1] = 0) then Faded := 1;
+  if (P[1].R = 0) and (P[1].B = 0) and (P[1].G = 0) then Faded := 1;
   WaitRetrace;
   SetPalette(P);
 end;
