@@ -1,0 +1,113 @@
+# How SOFTEL is built. Read by kit/tools/pascal/build.py, which holds the
+# method; everything here is this target's own data.
+#
+# NO MACHINE PATHS. DOSBox-X, the drive C: image and each compiler's location
+# live in kit.local.toml, which git ignores.
+#
+# STRUCTURE taken from the sibling consumer at ../VangeliSTracker/v1.51 on
+# 4 Sep 2026. Nothing MEASURED there is carried here: that target read its
+# switch line out of its own shipped TPC.CFG, and SOFTEL's distribution
+# contains no such file. See [compiler.tp6].
+
+src     = "src"
+build   = "build"
+title   = "Softel build"
+drive   = "D"
+log     = "BUILD.LOG"
+timeout = 180
+lint    = "kit/tools/pascal/paslint.py"
+
+[compiler]
+# TURBO PASCAL 6 -- the image says so: `Portions Copyright (c) 1983,90 Borland`
+# at file offset 0x2489. WHICH PATCH LEVEL IS NOT SETTLED. TP600 and TP601 are
+# both installed and both are declared below so the question can be measured
+# against the runtime segment 11f5 rather than assumed.
+default = "tp6"
+
+[compiler.tp6]
+# NO `binpath`. The kit derives the DOS bin directory from `toolchain.tp6` in
+# kit.local.toml -- the answer that actually INVOKES the compiler -- so there
+# is no typed copy here to go stale. See the kit's observation
+# `typed-copy-of-a-derived-path`: a duplicate on the side where being wrong is
+# free stayed wrong across 15 entries in a sibling consumer while every check
+# passed, because nothing compiles through it. TP6's install is flat, so
+# TPC.EXE sits in the tree root rather than a BIN subdirectory.
+dialect = "tp6"
+
+# /$G+ IS ASSERTED ON EVIDENCE; EVERY OTHER CODE-GENERATION SWITCH IS NOT.
+# The original's frame teardowns are `c9` -- LEAVE, an 80186/286 instruction.
+# probes/STACKCHK.PAS through codegen.py shows that /$S+ alone emits `5d`
+# (POP BP) and that adding /$G+ changes exactly one byte in the probe, `5d` to
+# `c9`. So the DEFAULT is measurably wrong here and $G+ is measurably right.
+#
+# $S is deliberately NOT asserted, and that is the opposite case rather than an
+# oversight: $S+ is TPC's own default AND is what the original shows, so naming
+# it would add a switch that changes nothing. probecheck reports 128 bytes for
+# `tp6` on bare defaults and for /$S+, against 96 for /$S-.
+#
+# /GD asks for a detailed .MAP, which is the artefact every blocked config in
+# SETUP.md's steps 3-5 is waiting on. /Q keeps the log readable.
+#
+# NO CODE-GENERATION SWITCH IS ASSERTED. build.py warns that a wrong switch
+# line does not fail -- it produces a build that MEASURES wrong -- and $G+
+# alone decides whether 286 instructions are emitted at all. The sibling
+# consumer has a full line because it read it out of a shipped TPC.CFG;
+# SOFTEL's distribution has no TPC.CFG, so every one of those switches would
+# be a guess wearing the clothes of a fact. TPC's own defaults apply until
+# each is measured -- fpusites.py settles $N. $N is the one still open.
+switches = "/$G+ /GD /Q"
+
+[compiler.tp61]
+# Turbo Pascal 6.01, declared so the patch level can be measured rather than
+# argued. Same reasoning on switches.
+dialect = "tp6"
+switches = "/$G+ /GD /Q"
+
+[assembler]
+# Nothing here assembles yet. GoldPlay's PLAY.ASM is THEIRS and is not built:
+# bin/SOFTEL.OVL is byte-identical to the shipped goldplay/v1.00/GOLDPLAY.OVL.
+# /la leaves a listing, which is the quickest way to see what byte an
+# instruction assembled to.
+flags = "/la /m2"
+
+[order]
+# DECLARED, and EMPTY because src/ is empty. An order is a person's judgement
+# about which unit must precede which, and there is nothing yet to judge.
+mode = "declared"
+list = [
+  "SCREEN.PAS",   # 118a  the virtual-screen unit -- uses nothing, so it is a
+                  #       leaf and needs no ordering decision yet
+]
+
+[stage]
+# TP6 is a DOS tool and chokes on anything above 7 bits in source, so
+# everything round-trips through the DOS code page and a character that cannot
+# survive becomes visible here rather than as an error forty lines away.
+encoding = "cp437"
+
+[names]
+# source name -> 8.3 name, where they differ. Empty until src/ has files.
+
+[install]
+# Empty until there is something to install. `layout.built` in kit.toml names
+# where it would go, and built_pattern says which file is ours.
+
+# TWO ENTRIES THAT DIFFER ONLY IN ONE SWITCH, so codegen.py becomes a switch
+# comparison rather than a compiler comparison -- it compiles a probe with each
+# DECLARED entry, and both of these resolve to the same TPC.EXE through
+# kit.local.toml. Declared for the same reason the sibling consumer declares
+# tp61: to keep a question measurable instead of argued. Neither is ever the
+# build default.
+[compiler.tp6_sp]
+dialect  = "tp6"
+switches = "/$S+ /GD /Q"
+
+[compiler.tp6_sm]
+dialect  = "tp6"
+switches = "/$S- /GD /Q"
+
+[compiler.tp6_gp]
+# /$G+ alongside /$S+, so codegen.py can show what 286 code generation changes
+# in a frame teardown. See probes/STACKCHK.PAS.
+dialect  = "tp6"
+switches = "/$S+ /$G+ /GD /Q"

@@ -1,0 +1,78 @@
+# SOFTEL's LAYOUT: which segments the load image holds, and where the data
+# group starts. Read by mapcmp, linkorder, linkbytes, dgroup, coverage and
+# segdoc. One table per part; SOFTEL is one program, so it is a table with one
+# row -- SETUP.md is explicit that a single-target project is not a special
+# case with its own keys.
+#
+# EVERY ADDRESS BELOW IS MEASURED, not read off Ghidra's block list, and the
+# two disagree. Ghidra draws CODE_0 to 1000:160f and starts CODE_1 at
+# 1160:0010; both are 16 bytes out. survey.py finds ONE far return in the
+# program at 0x1610 and NONE at 0x1600 -- and none is correct, because a
+# program body ends in the runtime's halt rather than a RETF. The RETF Ghidra
+# lends the program is 1160:000e, the end of the GoldPlay unit's first routine.
+
+layout = "docs/00-map.md"    # the segment/size document coverage measures
+                             # against; segdoc.py generates one
+
+[lists]
+# The runtime's units -- not ours to transcribe.
+# The runtime's units -- NOT ours to transcribe. Crt joined this list on
+# evidence: 1193's init does `mov ah,0x0f; int 10h`, builds two text-file
+# records at DGROUP 0x3b58 and 0x3c58 and hands each to an RTL routine (that
+# is Input and Output being assigned), and 1193:0180 is Crt.Window -- four
+# byte parameters validated against [0x3b52]/[0x3b53] and stored into
+# [0x3b4c]/[0x3b4e], which are WindMin and WindMax.
+rtl   = ["System", "Crt"]
+noseg = []
+
+[unitname]
+# source name -> linker-map name, where they differ. Empty: nothing is
+# abbreviated yet, because src/ is empty.
+
+[part."000"]
+# THE MAP DOES NOT EXIST YET and this names where it will be. src/ holds no
+# SOFTEL.PAS, so nothing has produced a SOFTEL.MAP; the toolchain is proven
+# (build.py --selftest compiles under TP600 and TP601 and emits a detailed
+# .MAP) but it has no sources to compile. Any instrument reading this key
+# fails until there is a program to build -- which is a to-do, not a silence.
+map        = "build/SOFTEL.MAP"
+main_unit  = "SOFTEL"
+program_seg = 0x1000         # NAMED, never taken as segments[0]: position
+                             # means "the program" only by coincidence of
+                             # link order.
+
+# end_at AND dgroup_at ARE TWO FACTS, and here they are equal because the
+# segment list below INCLUDES the runtime. Both are 0x12eb, and that is
+# measured twice over: the load image is 12032 bytes and 12eb:0050 in image
+# coordinates is 0x2f00 = 12032 exactly, so the file ENDS 0x50 bytes into
+# this paragraph. What lies in those 80 bytes is DGROUP's initialised data --
+# 79 zero bytes and one 02 -- and everything past 12eb:0050 is the loader's
+# BSS, which the MZ header's minalloc asks for as 19712 bytes.
+end_at     = 0x12eb
+dgroup_at  = 0x12eb
+
+# ASCENDING AND COMPLETE, because each segment's extent is the NEXT entry's
+# base -- which is why there is no length column. Two of these are named and
+# four are not; the unnamed ones are open as `unidentified-units-118a-1193`
+# in the register, and a linker map is what will settle them.
+segments = [
+  { segment = 0x1000, name = "SOFTEL" },    # the program, 0x1600 bytes
+  { segment = 0x1160, name = "GOLDPLAY" },  # 671 code + 1 pad; a build INPUT,
+                                            # matched against
+                                            # goldplay/v1.00/GOLDPLAY.TPU
+  { segment = 0x118a, name = "SCREEN" },    # OURS, and the only unit that is.
+                                            # 0x8b of code + 5 bytes of pad.
+                                            # The ORIGINAL's unit name is not
+                                            # recoverable from the image, so
+                                            # SCREEN is this reconstruction's
+                                            # choice and the linker map will
+                                            # say what we called it.
+  { segment = 0x1193, name = "Crt" },       # the RTL's, see [lists].rtl
+  { segment = 0x11f5, name = "System" },    # the runtime; rtl.py match finds
+                                            # its prologue here
+]
+
+# NOT A CODE SEGMENT. Ghidra calls 12eb:0000..004f `CODE_5` because four
+# fixups name paragraph 02eb -- but those are references TO the data group
+# (a `MOV AX,DGROUP` loading DS), not code inside it.
+data = [ { segment = 0x12eb, why = "DGROUP's initialised head, 80 bytes, and the last thing in the file" } ]

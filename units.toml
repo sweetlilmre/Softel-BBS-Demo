@@ -1,0 +1,12 @@
+# Each compiled unit and the segment it must rebuild. Read by units.py, and by
+# coverage.py which shells out to it.
+
+sources  = "src"        # so a STALE build is refused rather than measured
+rewrites = []
+
+[unit.SCREEN]
+# The segment's EXTENT is 0x90; `length` is the code length LESS the linker's
+# zero padding, and the original's last five bytes (008b..008f) are zero. So a
+# unit that compiles shorter is compared over the overlap rather than failed.
+segment = 0x118A
+length  = 139
