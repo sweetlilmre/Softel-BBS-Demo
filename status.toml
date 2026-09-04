@@ -8,6 +8,17 @@
 [coverage]
 targets = 20
 
+[observation."SOFTEL"]
+harness = "SOFTEL"
+tier = "part"
+outcome = "matches"
+achieved = "R3"
+observer = "maintainer"
+date = "2026-09-04"
+confirmed_at = "bb0d43af0825"
+fingerprint = "80d770d33ee74163"
+against = "ref/softel.bin"
+
 [[plan.investigation]]
 name = "overlay-is-stock-goldplay"
 finding = "SOFTEL.OVL is not the demo's own code. bin/SOFTEL.OVL is byte-identical to goldplay/v1.00/GOLDPLAY.OVL (md5 1171f00214f6f1fcad96e704c6a71c0d, both 35715 bytes, both dated 17 Jul 1992), and the file's own header carries 'GoldPlay ver 1.00 (C)opyright 1992 The CodeBlasters'. goldplay/v1.01/goldplay.ovl differs, so the demo shipped v1.00. The reconstruction target is therefore SOFTEL.EXE alone; the overlay is a build INPUT, and goldplay/v1.00 holds its GOLDPLAY.TPU, GOLDPLAY.OBJ and PLAY.ASM."

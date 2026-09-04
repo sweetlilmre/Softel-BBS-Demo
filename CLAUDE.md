@@ -119,8 +119,15 @@ Proven working under both `tp6` and `tp61`. DOSBox-X and four Turbo Pascal trees
 
 ## Where the reconstruction stands
 
-Both sources are written. `python runtest.py` stages a watched run with the
-shipped binary and ours side by side on R:.
+**R3 — a viewer sees no difference.** Recorded 4 Sep 2026 from a watched run:
+`observe.py` has `SOFTEL part matches R3`, compared against `ref/softel.bin`.
+That is the top of the behavioural ladder and the strongest claim available
+short of byte-identity. `python runtest.py` stages the run; `RUN ORIG` and
+`RUN OURS` on R:.
+
+**The band two-thirds down the screen is authentic**, not a `ScrollUp` defect.
+It appears in captures of the original at the same height -- it is the
+wrap-scroll caught mid-frame.
 
 | | |
 |---|---|
