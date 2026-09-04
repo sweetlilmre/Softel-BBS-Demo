@@ -24,3 +24,7 @@ ghidra/
 # The watched-run staging area: everything in it is copied from bin/ and
 # build/, and DOSBOX.CONF is generated because it carries a machine path.
 run/
+
+# codegen.py writes each probe compile here. Derived, and it changes on
+# every run -- a .TPU also embeds a timestamp, so it never compares equal.
+probes/out/
