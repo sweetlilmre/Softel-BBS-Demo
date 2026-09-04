@@ -117,10 +117,72 @@ Proven working under both `tp6` and `tp61`. DOSBox-X and four Turbo Pascal trees
 
 `link.toml` holds the layout, every address in it measured. Its `map` key names `build/SOFTEL.MAP`, which does not exist yet — there is no `SOFTEL.PAS` to compile. That is a to-do, not a silence.
 
-## `src/SCREEN.PAS`
+## Where the reconstruction stands
 
-The unit's code is the original's bytes. `units.py` reports `identical, 46 pending fixups` over its declared 139, and all 46 are zero on our side: eight 4-byte far pointers (the stack check once per framed routine, plus GetMem, FillChar, FreeMem and the init's call) and seven 2-byte DGROUP offsets. 8×4 + 7×2 = 46, and nothing else differs.
+Both sources are written. `python runtest.py` stages a watched run with the
+shipped binary and ours side by side on R:.
 
-**What is not yet tested is the variable addresses.** Those seven offsets are supplied by the linker, so `1e35`, `2035` and `423b` are zeros in our `.TPU` and nothing has compared them. `dsmap.py` is the instrument and it needs a linked image.
+| | |
+|---|---|
+| `SCREEN.PAS` | `units.py`: identical but for 46 link-time fixups |
+| `SOFTEL.PAS` | `mapcmp`: 5072 of 5632 padded |
+| DGROUP | `dsmap`: **163 references at shift zero**, `$0003..$3DA4` |
+| GOLDPLAY / SCREEN / Crt | exact in `mapcmp` |
 
-**The DGROUP gap is open.** `Virtual` sits at `DS:$351e` and `VirtualSeg` at `DS:$3b42` — 1572 bytes apart, with nothing declared between. Do not close it with a guessed filler array: `dsgaps.py` prices declarations against the original with no build at all, and it only knows the addresses the sources record, so the way forward is to record more of them while reading the program. Open as `screen-dgroup-gap-unexplained`.
+**Six routines are byte-identical** — `WaitRetrace`, `FadeStep`, `PutSprite`,
+`PutStrip`, `SetRGB`, `MoveBlock`. `CyclePalette` and `ScrollUp` are size-exact
+and differ only at far-call fixups.
+
+## The one open question is the COMPILER, not the source
+
+Every remaining byte has one explanation: **the original's compiler spills
+intermediates to stack temporaries where ours computes them in registers.**
+Three independent constructs show it, and a source difference can produce none
+of them:
+
+- **String constants passed by value.** The original copies each into a temp
+  *sized to that constant* and passes the temp — 18 bytes per call site against
+  our 8. The temp sizes match all seventeen credit-line lengths exactly, so the
+  code generator is choosing them. 61 call sites × 10 bytes is the body's whole
+  −600.
+- **`SetPalette`.** `enter 6` against our `enter 2`; the four extra bytes hold a
+  pointer, through which the original fetches `P[I][0]` while `[1]` and `[2]`
+  come from direct indexing.
+- **`DrawFrame`.** Same shape — `enter 6` against `enter 2`, loading an address
+  through the local where ours pushes the computed value.
+
+**All four installed compilers are eliminated**, and by a whole-program build
+rather than a probe: building all of `SOFTEL.PAS` with `tp61` instead of `tp6`
+gives an identical result, to the byte. TP7 *inlines* the very helper the
+original calls out to. So the question is narrow — which TP6 build spills these?
+Another 6.x patch level, a localised release, or BP7 in TP6 mode would settle it
+in one build.
+
+**Do not rewrite the Pascal to chase these bytes.** Imitating a temp this
+compiler will not emit would make the source wrong in order to make the bytes
+right.
+
+## Two rules worth keeping about locals
+
+**Declaration ORDER is the frame layout.** Turbo Pascal allocates locals
+downward in declaration order, so the order of a `var` block is testable
+against the original's `[bp-n]` displacements. `FadeStep` became byte-identical
+purely by declaring `Moved` before `I` — the original writes its flag at
+`[bp-2]` and this file had it at `[bp-5]`. The other obvious spelling, letting
+the function result carry the flag, made it *worse* (129 against 135), which is
+what proved the local was real.
+
+**Each `enter` operand is a budget.** It gives the original's exact local byte
+count, so a routine whose frame is short is missing a declaration and one whose
+frame is long has an extra. `PutGlyph`'s original reserves 4 where `Byte`
+counters give 2, so its `I` and `J` are `Word`s.
+
+## Reading the instruments here
+
+`routines.py` reports a matched *prefix* under its own stop rule, so "78 of 91"
+is not necessarily a divergence — `PutSprite` is in fact identical over all 91.
+Diff a routine directly before believing a partial figure.
+
+`dsmap`'s residue of 7 sites at `$F50F` is not a defect: that is
+`Mem[VirtualSeg:$F500]` in `ScrollUp`, a segment-override reference, which it
+pairs as though it were DS-relative.
