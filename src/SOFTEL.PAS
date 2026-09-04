@@ -61,15 +61,38 @@ type
     as the outer subscript -- transposed against the screen, where J is the
     COLUMN and I the row. }
   TGlyph   = array [1..16, 1..16] of Byte;
-  TFont    = array [0..58] of TGlyph;
+
+  { [re] THE BOUNDS START AT 32, and the displacement says so. PutGlyph's
+    original reads es:[di-2011h] where this file's zero-based bounds gave
+    es:[di-11h]; the difference is 2000h, which is 32 * 256 -- the base
+    adjustment for a first subscript of 32. And 32 to 90 inclusive is 59
+    glyphs, which is 15104 / 256 exactly. So the font runs from space to 'Z',
+    which is all the demo's text uses.
+
+    [re] THIS WAS A REAL BUG, not just a size difference: with [0..58] the
+    lookup for 'A' read 8192 bytes past the glyph it wanted, so every
+    character on screen was garbage. A watched run is what showed it -- the
+    text strip rendered as overlapping blobs while the original reads
+    INTERNATIONAL MAIL. No byte instrument had flagged it as anything worse
+    than an eight-byte size difference. }
+  TFont    = array [32..90] of TGlyph;
 
   { [re] The animation path: 14976 bytes as 72 frames of 208, and 72 * 208 is
     14976 exactly. DrawFrame reads a word pair at N * 208 + I * 4 - 212, and
     with both subscripts based at one that is precisely (N-1)*208 + (I-1)*4 --
     which is what fixes the frame at 208 bytes rather than the 204 that 51
     objects need, and fixes Y as the FIRST word of the pair. }
+  { [re] X FIRST, and the DATA settles it rather than the disassembly. Across
+    frames 1, 36 and 72 the first word of each pair ranges 38..243 and the
+    second 77..134. Mode 13h is 320 by 200 and PutSprite draws 15 by 14, so a
+    legal Y is 0..186 -- the first word cannot be one. The first word is X.
+
+    [re] THIS FILE HAD THEM THE OTHER WAY ROUND and the sprites came out
+    transposed: a word spelled horizontally across the screen appeared as a
+    vertical column. Reading Ghidra's parameter numbering got it backwards;
+    the coordinate RANGES could not. }
   TObj     = record
-               Y, X : Word;
+               X, Y : Word;
              end;
   TFrame   = array [1..52] of TObj;
   TPath    = array [1..72] of TFrame;
