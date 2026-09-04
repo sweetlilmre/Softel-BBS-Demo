@@ -19,8 +19,8 @@ program Softel;
 
   [re] STATE OF THIS FILE: the structure and the two long call sequences are
   transcribed and the shapes are read, but four routines are declared with
-  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB, MoveBlock,
-  ShowLine, ShowLineReverse and FlyCredit. Their addresses are on the plan as
+  empty bodies and are NOT written -- PutSprite, PutStrip, SetRGB, MoveBlock
+  and FlyCredit. Their addresses are on the plan as
   rows at R0. Nothing here should be read as a claim that the bytes match. }
 
 { [re] THE ORDER OF THIS CLAUSE IS MEASURED, not stylistic. Turbo Pascal 6
@@ -112,17 +112,26 @@ begin
   FadeStep := Moved;
 end;
 
-{ [re] 1000:0095. 15 by 14, zero transparent, into a 320-stride buffer.
+{ [re] PARAMETER ORDER FOR THIS ROUTINE AND THE NEXT TWO CAME FROM THE RAW
+  PUSH ORDER, not from a decompiler. Ghidra numbers parameters by stack
+  offset, so its param_1 is the LAST pushed -- the reverse of the declaration
+  order -- and reading its signature straight off gets them backwards. At
+  1000:053d the pushes are 7, 0x14, DS:$1d10, then the buffer segment, which
+  is PutStrip(X, Y, Strip, Dest). At 1000:0551 the CHARACTER is pushed first
+  and the x position second, so it is PutGlyph(Ch, X) and not the other way
+  about -- which is how this file had it until the bytes were read.
+
+  [re] 1000:0095. 15 by 14, zero transparent, into a 320-stride buffer.
   NOT WRITTEN. The original is a byte loop with a skip on zero rather than
   indexed array code, so it is assembler in the source too. }
-procedure PutSprite(Dest : Word; var S : TSprite; Y, X : Word); assembler;
+procedure PutSprite(X, Y : Word; var S : TSprite; Dest : Word); assembler;
 asm
 end;
 
 { [re] 1000:00f0. The strip blitted whole -- 0x99 words by 0x12 rows,
   destination stride 0x140. The body calls it with Y=20 and X=7, so the
   306-wide strip lands at column 7 of a 320-wide buffer. NOT WRITTEN. }
-procedure PutStrip(Dest : Word; var S : TStrip; Y, X : Word); assembler;
+procedure PutStrip(X, Y : Word; var S : TStrip; Dest : Word); assembler;
 asm
 end;
 
@@ -138,9 +147,9 @@ var
   I : Byte;
 begin
   for I := 1 to 51 do
-    PutSprite(BufSeg, Blip,
+    PutSprite(MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210],
               MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 212],
-              MemW[Seg(Path^) : Ofs(Path^) + N * 208 + I * 4 - 210]);
+              Blip, BufSeg);
 end;
 
 { [re] 1000:01ca. All 256 entries. The parameter is BY VALUE -- the routine
@@ -202,7 +211,7 @@ end;
 { [re] 1000:03f5. One 16x16 glyph into the strip, skipping zero pixels so a
   glyph is transparent over what is already there. The font is indexed by
   character times 256. }
-procedure PutGlyph(X : Word; Ch : Byte);
+procedure PutGlyph(Ch : Byte; X : Word);
 var
   I, J : Byte;
 begin
@@ -226,13 +235,85 @@ end;
   A shared constant would have been emitted once, so the source has the
   literal written out twice rather than a named constant used twice.
 
-  NOT WRITTEN. }
+  [re] The guard is one short-circuit test and an Exit rather than a positive
+  if-block: 04b8 calls KeyPressed and jumps to the tail when it is true, then
+  tests Faded and jumps to the BODY when that is zero, falling through to the
+  tail otherwise. That is `if KeyPressed or (Faded <> 0) then Exit`.
+
+  [re] The strip is reset with an explicit Move and not an array assignment:
+  the original calls the runtime with (Clean, Work, 5508). }
 procedure ShowLine(S : String);
+var
+  Line : String;
+  X    : Integer;
+  N    : Byte;
+  I    : Byte;
 begin
+  if KeyPressed or (Faded <> 0) then Exit;
+  I := 1;
+  N := 1;
+  Line := '                  ';
+  Move(Clean, Work, 5508);
+  X := 0;
+  repeat
+    Line[I] := S[I];
+    ScrollUp;
+    CyclePalette(Pal);
+    Blit(VirtualSeg, BufSeg);
+    PutStrip(7, 20, Work, BufSeg);
+    PutGlyph(Ord(Line[I]), X);
+    if I < Length(S) then X := X + 17;
+    DrawFrame(Frame);
+    Inc(Frame);
+    if Frame > 72 then Frame := 1;
+    Blit(BufSeg, $A000);
+    Inc(N);
+    if N <= Length(S) then I := N;
+    if KeyPressed then
+      begin
+        KeyHit := 1;
+        ReadKey;
+      end;
+  until (N = 50) or KeyPressed or (Faded <> 0);
 end;
 
+{ [re] The mirror, and three numbers are the whole difference: the blank
+  constant is the one at 05cd rather than 048e, X starts at 289 and walks
+  DOWN by 17, and the counter starts at Length and runs to -20 -- 0xffec as a
+  word, which is what says it is signed rather than a Byte. }
 procedure ShowLineReverse(S : String);
+var
+  Line : String;
+  X    : Integer;
+  N    : Integer;
+  I    : Byte;
 begin
+  if KeyPressed or (Faded <> 0) then Exit;
+  I := Length(S);
+  N := Length(S);
+  Line := '                  ';
+  Move(Clean, Work, 5508);
+  X := 289;
+  repeat
+    Line[I] := S[I];
+    ScrollUp;
+    CyclePalette(Pal);
+    Blit(VirtualSeg, BufSeg);
+    PutStrip(7, 20, Work, BufSeg);
+    PutGlyph(Ord(Line[I]), X);
+    if N > 1 then X := X - 17;
+    DrawFrame(Frame);
+    Inc(Frame);
+    if Frame > 72 then Frame := 1;
+    Blit(BufSeg, $A000);
+    Dec(N);
+    if N > 0 then I := N;
+    if KeyPressed then
+      begin
+        KeyHit := 1;
+        ReadKey;
+      end;
+  until (N = -20) or KeyPressed or (Faded <> 0);
 end;
 
 { [re] 1000:070f. softel.dat, six BlockReads that sum to 100566 -- the file's
