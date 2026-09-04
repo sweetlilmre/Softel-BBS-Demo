@@ -100,3 +100,93 @@ name = "ghidra-not-tracked"
 finding = "ghidra/ IS DELIBERATELY NOT UNDER SOURCE CONTROL, and this row exists because the reasoning was originally written only into a commit message that was then rewritten away. IT WAS TRACKED FOR FOUR COMMITS: 1.75M, of which 1.75M was two 917504-byte Ghidra buffer files. Those two are not a duplicate pair somebody could trim -- db.1.gbf and db.2.gbf differ, and both are live buffer files of one database. The reason to drop them is what the database CONTAINED: 0 functions and 1 symbol. Auto-analysis had never been run and no person had annotated anything, so every tracked byte was derived from bin/SOFTEL.EXE -- 12832 bytes -- plus the MZ loader's defaults. It is also mutating while Ghidra is open. Softel.lock was held by a live instance the whole time, and a third file of exactly 917504 bytes (tmp*.ps) sat beside the two, so the commit captured a snapshot of files somebody else had open. NOTHING WAS LOST, because everything read out of Ghidra was already text: the memory map in link.toml, target.first_para in kit.toml, the segment identifications and the withdrawn readings in this register, and the instruction-level readings in src/SCREEN.PAS's [re] comments. TO RECREATE IT: import bin/SOFTEL.EXE as x86:LE:16:Real Mode and accept the MZ loader's defaults, which place the load image at 1000:0000 -- that is where first_para comes from. Do not trust the block boundaries it draws; they are 16 bytes out, which load-image-segment-map records. THE STANDING PREFERENCE: if annotation ever accumulates in Ghidra, move it into the sources as @asm markers and [re] prose rather than tracking the database. A marker is read by markers.py and locked by the ratchet; a .gbf is read by nothing and diffed by nothing. The history was rewritten to drop the blobs rather than merely untracking them, which was safe because this repository has no remote and nothing had been published."
 state = "resolved"
 resolution = "ghidra/ is in .gitignore, CLAUDE.md carries the recreation recipe and the block-boundary warning, and the four commits were rebuilt without the blobs so no history claims ghidra was ever tracked. The working project on disk was never touched."
+
+[[plan.investigation]]
+name = "program-routine-map"
+finding = "SEGMENT 1000 IS DECOMPOSED: 15 routines of its own, a block of string constants, and a main body. Mapped from the segment's own near-call targets (E8 rel16 landing inside 0x1600) and its length-prefixed string constants, so every boundary below is the binary's rather than a reading. THE BODY IS AN UNROLLED SEQUENCE. Three routines carry the demo and each is called at a REGULAR STRIDE from the main body, which is what says the source is a straight-line list of statements rather than a loop: 04a1 twenty-two times from 10e2 at stride 0x24, 05e0 twenty-two times from 10f4 at the same stride and interleaved with it, and 07c0 seventeen times from 1452 at stride 0x14. Each call is preceded by the same six-instruction shape -- lea di,[bp-N] / push ss / push di / mov di,STRING / push cs / push di / lcall 01f5:096d -- which is a string constant being copied into a local before the call. STRING CONSTANTS occupy 048e..0f93, immediately below the entry point at 0f94. Thirty-four of them are exactly 18 characters and are the BBS advert lines; the rest are longer credit and e-mail lines. NOTE THAT THE LONG ONES ARE NOT CLEANLY SEGMENTED by a length-byte scan -- a maximal non-overlapping pass merges neighbours, so the 18-character table is reliable and the long table is not. Do not transcribe the long strings from that scan; read each length byte. THE PROGRAM'S GLOBALS, so far: three Bytes at DS:$3370, $3371 and $3372 set to 0, 0 and 1 before anything else; a Char at $3374 holding the music answer; three heap pointers at $329a/$329c (GetMem 0x3a80 = 14976), $3294/$3296 (GetMem 0xfa00 = 64000) and $46/$48 (GetMem 0x3b00 = 15104); and a Word at $3298 holding Seg of the 64000-byte buffer. GoldPlay's Error is the Word at $3376. THE OPENING IS TESTPLAY.PAS. System init, Crt init, Screen init, then ClrScr, Write('Do you want music? (y/n) : '), a ReadKey/UpCase loop until the key is in a two-character constant, echo, WriteLn, and if it was 'Y' then LoadOvl('softel.ovl'), AskInit, Initialize, LoadModule('patega.mod'), and on Error<>0 a WriteLn('Module Not Found') and Halt. GoldPlay's entry points are therefore 0160:00ce LoadOvl, 0160:0000 AskInit, 0160:0010 Initialize, 0160:0022 LoadModule and 0160:007d StartPlaying, which agrees with the order TESTPLAY.PAS calls them in."
+state = "open"
+
+[[plan.investigation]]
+name = "rtl-and-crt-entry-points"
+finding = "A CALL TABLE FOR THE RUNTIME AND Crt, read off argument shapes at the call sites rather than from bodies. Each is an INFERENCE and the confidence differs per row; rtl.py find is what would confirm any of them, and it needs an RTL.toml this target does not have. They are recorded because the same targets recur dozens of times and re-deriving them per call site is the waste this row prevents. Crt (segment 0193): 01c0 ClrScr -- no arguments, called before the prompt and again after it. 030d ReadKey -- no arguments, result taken in AL and fed to UpCase. 02fb KeyPressed -- no arguments, result tested with `or al,al`, called 8 times and always as an early exit. Screen (segment 018a), already transcribed in src/SCREEN.PAS: 0000 Blit, 0024 SetGraphicsMode, 002a OpenVirtual, 005e CloseVirtual, 007a its init. GoldPlay (segment 0160): 0000 AskInit, 0010 Initialize, 0022 LoadModule, 007d StartPlaying, 00ce LoadOvl. Confirmed by ORDER as well as arity -- the body calls them in exactly the sequence TESTPLAY.PAS does. System (segment 01f5): 00e9 Halt, called with ax=0. 023f GetMem and 0254 FreeMem and 0f36 FillChar, already recorded. 0848 WriteLn, 086c the write terminator, 08b5 Write of a Char, 0917 Write of a String -- all four taking the text file at DS:$3c58, which is Crt's Output. 0c22 a membership or position test over a two-character constant, driving the `until` of the ReadKey loop. 0f4a UpCase. 0f13 Move, three arguments, seen moving 5508 bytes from DS:$078c to DS:$1d10 -- two adjacent arrays whose gap is 0x1584, exactly the count. 096d and 0987 are BOTH string copies and the difference matters: 096d takes (dest, src) and appears before every display call, copying a code-segment constant into a local; 0987 takes (dest, src, 255) and is what a String value parameter's prologue uses. 04a1, THE FIRST DISPLAY ROUTINE, in outline: `enter 0x208` for 520 bytes of locals; the String parameter at [bp+4] copied into a 256-byte local via 0987, so its signature is procedure(S : String); an early exit if KeyPressed or if the Byte at DS:$3371 is non-zero; two Byte locals set to 1; a second local String primed from the 18-blank constant at 048e; the 5508-byte Move; then a loop that takes S[i] into the second string one character at a time, calling 03ae, then 0231 with @DS:$004a, then Screen.Blit(VirtualSeg, the Word at DS:$3298). Note there are TWO 64000-byte buffers -- Screen's own from OpenVirtual and the program's own from GetMem at 1084 -- and Blit moves between them."
+state = "open"
+
+[plan.row."000 1000:0000"]
+label = "reached only from 037c"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:000e"]
+label = "reached only from 1406, late in the body"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:0095"]
+label = "reached only from 01a0"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:00f0"]
+label = "x2, from 053d and 067e"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:013e"]
+label = "x2, from 0567 and 06a1"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:01ad"]
+label = "reached only from 0222"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:01ca"]
+label = "x3, from 0384 and from the body at 10c4/13f1"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:0231"]
+label = "x2, from 0520 and 0661"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:038b"]
+label = "reached only from 03d9"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:03ae"]
+label = "x2, from 0518 and 0659"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:03f5"]
+label = "x2, from 0551 and 068e"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:04a1"]
+label = "THE FIRST DISPLAY ROUTINE -- 22 calls, stride 0x24"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:05e0"]
+label = "THE SECOND DISPLAY ROUTINE -- 22 calls, interleaved with 04a1"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:070f"]
+label = "loads softel.dat -- one call, from 10b0, just before StartPlaying"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:07c0"]
+label = "THE THIRD DISPLAY ROUTINE -- 17 calls from 1452, stride 0x14"
+investigation = "program-routine-map"
+target = "R0"
+
+[plan.row."000 1000:0f94"]
+label = "the main body, to 15ff -- mostly the unrolled call sequence"
+investigation = "program-routine-map"
+target = "R0"
