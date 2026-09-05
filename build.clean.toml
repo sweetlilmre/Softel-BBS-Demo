@@ -1,0 +1,263 @@
+# How the STRIPPED COPY is built. Everything about the method and every
+# measured switch lives in build.toml; this file differs from it in exactly two
+# keys, `src` and `build`, and exists for one reason.
+#
+# THE STRIPPER HAS ONE BLIND SPOT AND THIS IS THE ONLY THING THAT SEES IT.
+# clean.py verifies its own output by blanking every `{ ... }` in both copies
+# and comparing the code, which is what makes the check immune to wording --
+# and therefore also immune to a `{$I-}`. A compiler directive IS a comment to
+# that check, so damage to one is the single edit the stripper can make that it
+# will never report, and directives are exactly the comments that change the
+# program. Building the copy and comparing the linked image is the check that
+# sees it.
+#
+# So: build both, then compare build/SOFTEL.EXE with build-clean/SOFTEL.EXE.
+# Identical is the only acceptable answer, because the two trees differ only in
+# comments. This is not a second reconstruction and nothing is installed from
+# it -- the copy is documentation, and building it is how we know it is still
+# the same program.
+
+# How SOFTEL is built. Read by kit/tools/pascal/build.py, which holds the
+# method; everything here is this target's own data.
+#
+# NO MACHINE PATHS. DOSBox-X, the drive C: image and each compiler's location
+# live in kit.local.toml, which git ignores.
+#
+# STRUCTURE taken from the sibling consumer at ../VangeliSTracker/v1.51 on
+# 4 Sep 2026. Nothing MEASURED there is carried here: that target read its
+# switch line out of its own shipped TPC.CFG, and SOFTEL's distribution
+# contains no such file. See [compiler.tp6].
+
+src     = "clean-src"
+
+# THE .TPU WIPE IS BACK ON. It had to be off while GOLDPLAY.TPU was staged as
+# a build input: build.py writes `del *.TPU` into BUILD.BAT, that runs inside
+# DOSBox AFTER staging, and it deleted the one file that could not be
+# regenerated -- reported as `File not found (GOLDPLAY.TPU)` on the uses
+# clause, which reads as a missing file rather than a deleted one. Now that
+# src/GOLDPLAY.PAS rebuilds the unit, nothing staged is irreplaceable and the
+# wipe does what it is for: a failed compile cannot be measured against a
+# stale unit. Verified by rebuilding to R7 with it on.
+wipe_tpu = true
+build   = "build-clean"
+title   = "Softel build (stripped copy)"
+drive   = "D"
+log     = "BUILD.LOG"
+timeout = 180
+lint    = "kit/tools/pascal/paslint.py"
+
+[compiler]
+# TURBO PASCAL 6 -- the image says so: `Portions Copyright (c) 1983,90 Borland`
+# at file offset 0x2489. WHICH PATCH LEVEL IS NOT SETTLED. TP600 and TP601 are
+# both installed and both are declared below so the question can be measured
+# against the runtime segment 11f5 rather than assumed.
+default = "tp6"
+
+[compiler.tp6]
+# NO `binpath`. The kit derives the DOS bin directory from `toolchain.tp6` in
+# kit.local.toml -- the answer that actually INVOKES the compiler -- so there
+# is no typed copy here to go stale. See the kit's observation
+# `typed-copy-of-a-derived-path`: a duplicate on the side where being wrong is
+# free stayed wrong across 15 entries in a sibling consumer while every check
+# passed, because nothing compiles through it. TP6's install is flat, so
+# TPC.EXE sits in the tree root rather than a BIN subdirectory.
+dialect = "tp6"
+
+# /$G+ IS ASSERTED ON EVIDENCE; EVERY OTHER CODE-GENERATION SWITCH IS NOT.
+# The original's frame teardowns are `c9` -- LEAVE, an 80186/286 instruction.
+# probes/STACKCHK.PAS through codegen.py shows that /$S+ alone emits `5d`
+# (POP BP) and that adding /$G+ changes exactly one byte in the probe, `5d` to
+# `c9`. So the DEFAULT is measurably wrong here and $G+ is measurably right.
+#
+# /$I- IS ASSERTED, AND THE ARITHMETIC IS EXACT. Under $I+ -- TPC's default --
+# every I/O operation is followed by a five-byte call to the runtime's result
+# check. LoadData performs eight checked operations (Reset, six BlockReads and
+# Close) and was exactly 40 bytes over the original; the extra call is visible
+# at LoadData+001eh, where the image goes straight to the next argument and
+# this reconstruction emitted lcall 04a9h. So the original does not check, and
+# nothing in it reads IOResult.
+#
+# /$O+ IS ASSERTED, AND IT IS THE ANSWER TO THE CALL-SITE GAP. Overlay code
+# generation is what makes TP6 copy a string constant into a stack temporary
+# SIZED TO THAT CONSTANT and pass the temporary, through a FAR call to an
+# unbounded copy helper that pops only its source -- which is the original's
+# eighteen-byte call site exactly, against the eight bytes $O- emits. Found by
+# sweeping every remaining switch through probecheck: $O+ was the only one that
+# changed how a literal is passed.
+#
+# /$X+ IS ALSO ASSERTED ON EVIDENCE. At 1000:15a8 the image calls Crt.ReadKey
+# and stores the result NOWHERE -- `lcall 0193:030d` followed straight by a
+# jump. Discarding a function result is exactly what extended syntax permits
+# and plain Pascal forbids, and TPC's default is $X-. Written as $X- the
+# source will not compile at all, which is the good kind of failure: the
+# keyboard drain reads `while KeyPressed do ReadKey`.
+#
+# $S is deliberately NOT asserted, and that is the opposite case rather than an
+# oversight: $S+ is TPC's own default AND is what the original shows, so naming
+# it would add a switch that changes nothing. probecheck reports 128 bytes for
+# `tp6` on bare defaults and for /$S+, against 96 for /$S-.
+#
+# /GD asks for a detailed .MAP, which is the artefact every blocked config in
+# SETUP.md's steps 3-5 is waiting on. /Q keeps the log readable.
+#
+# NO CODE-GENERATION SWITCH IS ASSERTED. build.py warns that a wrong switch
+# line does not fail -- it produces a build that MEASURES wrong -- and $G+
+# alone decides whether 286 instructions are emitted at all. The sibling
+# consumer has a full line because it read it out of a shipped TPC.CFG;
+# SOFTEL's distribution has no TPC.CFG, so every one of those switches would
+# be a guess wearing the clothes of a fact. TPC's own defaults apply until
+# each is measured -- fpusites.py settles $N. $N is the one still open.
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
+
+[compiler.tp61]
+# Turbo Pascal 6.01, declared so the patch level can be measured rather than
+# argued. Same reasoning on switches.
+dialect = "tp6"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
+
+[assembler]
+# Nothing here assembles yet. GoldPlay's PLAY.ASM is THEIRS and is not built:
+# bin/SOFTEL.OVL is byte-identical to the shipped goldplay/v1.00/GOLDPLAY.OVL.
+# /la leaves a listing, which is the quickest way to see what byte an
+# instruction assembled to.
+flags = "/la /m2"
+
+[order]
+# DECLARED, and EMPTY because src/ is empty. An order is a person's judgement
+# about which unit must precede which, and there is nothing yet to judge.
+mode = "declared"
+list = [
+  "GOLDPLAY.PAS", # 1160  the player unit, reconstructed. Must precede the
+                  #       program; the segment order in the image is
+                  #       1160 GOLDPLAY, 118a SCREEN, so this compiles first
+  "SCREEN.PAS",   # 118a  the virtual-screen unit -- uses nothing, so it is a
+                  #       leaf and needs no ordering decision
+  "SOFTEL.PAS",   # 1000  the program
+]
+
+[stage]
+# TP6 is a DOS tool and chokes on anything above 7 bits in source, so
+# everything round-trips through the DOS code page and a character that cannot
+# survive becomes visible here rather than as an error forty lines away.
+encoding = "cp437"
+
+# NOTHING is staged alongside any more. GOLDPLAY.TPU used to be, because
+# goldplay/v1.00 ships no goldplay.pas and the compiled unit was the only way
+# to resolve `uses GoldPlay`. src/GOLDPLAY.PAS now rebuilds that unit's code
+# block byte for byte, so the shipped TPU is no longer an input and the
+# reconstruction has no unbuildable dependency left. bin/SOFTEL.OVL is still
+# byte-identical to the v1.00 overlay, which is what says the demo shipped
+# that version unmodified -- the OVL is data the player loads at runtime and
+# was never compiled from anything here.
+alongside = []
+
+[names]
+# source name -> 8.3 name, where they differ. Empty until src/ has files.
+
+[install]
+# Empty until there is something to install. `layout.built` in kit.toml names
+# where it would go, and built_pattern says which file is ours.
+
+# TWO ENTRIES THAT DIFFER ONLY IN ONE SWITCH, so codegen.py becomes a switch
+# comparison rather than a compiler comparison -- it compiles a probe with each
+# DECLARED entry, and both of these resolve to the same TPC.EXE through
+# kit.local.toml. Declared for the same reason the sibling consumer declares
+# tp61: to keep a question measurable instead of argued. Neither is ever the
+# build default.
+[compiler.tp6_sp]
+dialect  = "tp6"
+switches = "/$S+ /GD /Q"
+
+[compiler.tp6_sm]
+dialect  = "tp6"
+switches = "/$S- /GD /Q"
+
+[compiler.tp6_gp]
+# /$G+ alongside /$S+, so codegen.py can show what 286 code generation changes
+# in a frame teardown. See probes/STACKCHK.PAS.
+dialect  = "tp6"
+switches = "/$S+ /$G+ /GD /Q"
+
+[compiler.tp6_vm]
+# /$V- alongside the asserted line: var-string checking off. The last
+# string-related switch this target has not measured. See
+# probes/STRLIT.PAS and the register's strconst-temp-helper-096d.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$V- /GD /Q"
+
+[compiler.tp7]
+# Turbo Pascal 7.01, declared ONLY to test one construct: whether TP7 is what
+# emits the original's eighteen-byte call site. The image's copyright string
+# says 1983,90 which is TP6, so a match here would be a contradiction worth
+# knowing about rather than a conclusion. Never the build default.
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
+
+[compiler.tp6_a]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$A- /GD /Q"
+
+[compiler.tp6_b]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$B+ /GD /Q"
+
+[compiler.tp6_d]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$D- /GD /Q"
+
+[compiler.tp6_e]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$E- /GD /Q"
+
+[compiler.tp6_f]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$F+ /GD /Q"
+
+[compiler.tp6_i]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$I- /GD /Q"
+
+[compiler.tp6_l]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$L- /GD /Q"
+
+[compiler.tp6_o]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$O+ /$I- /GD /Q"
+
+[compiler.tp6_n]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$N+ /GD /Q"
+
+[compiler.tp6_r]
+# A SWITCH SWEEP, one flip each from the asserted line. Declared only to let
+# probecheck answer "does any single TP6 switch change how a string constant
+# is passed" in one run instead of ten arguments. Never the build default.
+dialect  = "tp6"
+switches = "/$G+ /$X+ /$R+ /GD /Q"

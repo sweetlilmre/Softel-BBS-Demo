@@ -38,3 +38,8 @@ temp/
 # asmgen.py's scratch folder. The kit tool names it via [assembler].workdir and
 # defaults to this; it is wiped and rewritten on every assemble.
 asmwork/
+
+# The stripped copy's build. build.clean.toml points here; it is derived twice
+# over -- from clean-src/, which is itself generated from src/ -- and its only
+# purpose is to be compared with build/ and thrown away.
+build-clean/

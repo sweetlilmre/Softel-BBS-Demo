@@ -144,6 +144,21 @@ nothing alongside and `wipe_tpu` is back on. Three source-level directives
 carry that unit and are measured, not chosen: `$B+`, `$I+`, and the term order
 of one guard. `units.toml` checks segment `1160` alongside `118a`.
 
+## There is a stripped copy, and it is generated
+
+`clean-src/` is `src/` with the reverse-engineering apparatus removed — for a reader who came to understand the demo rather than to check a byte. **Generated, never hand-edited**, and regenerated whenever `src/` moves:
+
+    .venv/Scripts/python.exe kit/tools/pascal/clean.py src clean-src --exclude asm/shared-exempt.txt --report
+
+117 `[re]` paragraphs, 4 address-only comments and 10 address prefixes come out, over three files. `src/asm/shared-exempt.txt` is excluded because it is an instrument's input rather than documentation. `clean-src/README.md` is hand-written and the stripper leaves it alone, reporting it as kept.
+
+**And the copy is BUILT, which is not decoration.** `clean.py` checks itself by blanking every `{ ... }` in both copies and comparing the code — immune to wording, and therefore also immune to a `{$I-}`, because a directive *is* a comment to that check. Damage to a directive is the one edit the stripper can make that it will never report, and this target's switch line is load-bearing. `build.clean.toml` differs from `build.toml` in exactly two keys and closes that blind spot:
+
+    .venv/Scripts/python.exe kit/tools/pascal/build.py build.clean.toml
+    cmp build/SOFTEL.EXE build-clean/SOFTEL.EXE
+
+Measured 5 Sep 2026: `md5 7c4350cb3e664c942149feef990f3801` for `build-clean/SOFTEL.EXE`, the same as `build/SOFTEL.EXE` and `ref/softel.bin`. `build-clean/` is gitignored — derived twice over, and its whole purpose is to be compared and thrown away.
+
 ## The things that were not guessable
 
 Kept because each cost real time to find and none is visible in the source:
