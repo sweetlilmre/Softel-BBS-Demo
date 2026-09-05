@@ -152,7 +152,9 @@ of one guard. `units.toml` checks segment `1160` alongside `118a`.
 
 117 `[re]` paragraphs, 4 address-only comments and 10 address prefixes come out, over three files. `src/asm/shared-exempt.txt` is excluded because it is an instrument's input rather than documentation. `clean-src/README.md` is hand-written and the stripper leaves it alone, reporting it as kept.
 
-**And the copy is BUILT, which is not decoration.** `clean.py` checks itself by blanking every `{ ... }` in both copies and comparing the code — immune to wording, and therefore also immune to a `{$I-}`, because a directive *is* a comment to that check. Damage to a directive is the one edit the stripper can make that it will never report, and this target's switch line is load-bearing. `build.clean.toml` differs from `build.toml` in exactly two keys and closes that blind spot:
+**And the copy is BUILT, which is not decoration.** `clean.py` checks itself by blanking every `{ ... }` in both copies and comparing the code — immune to wording, and therefore also immune to a `{$I-}`, because a directive *is* a comment to that check. Damage to a directive is the one edit the stripper can make that it will never report, and this target's switch line is load-bearing. `build.clean.toml` closes that blind spot. It is **generated**, not hand-written -- `cleanconf.py` rewrites `build.toml` textually, keeping every comment where it was, and refuses to write unless no non-comment line still names the old directory. A hand-made copy was the first attempt here and is the trap the tool exists for: a config names its source tree in more than one place, and missing one *silently stages the original sources and passes*. `--check` regenerates without writing, so a stale clean config is a failing check rather than something to remember:
+
+    .venv/Scripts/python.exe kit/tools/pascal/cleanconf.py build.toml build.clean.toml --src clean-src --build build-clean --check
 
     .venv/Scripts/python.exe kit/tools/pascal/build.py build.clean.toml
     cmp build/SOFTEL.EXE build-clean/SOFTEL.EXE
